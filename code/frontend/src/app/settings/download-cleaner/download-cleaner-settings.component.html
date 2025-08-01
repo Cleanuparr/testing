@@ -7,27 +7,29 @@
         <h2 class="card-title m-0">Download Cleaner Configuration</h2>
         <span class="card-subtitle">Configure automatic download cleanup</span>
       </div>
-      <div class="flex align-items-center gap-2">
-        <i class="pi pi-cog text-xl"></i>
-      </div>
     </div>
   </ng-template>
 
   <div class="card-content">
     <!-- Loading/Error State Component -->
     <app-loading-error-state
-      *ngIf="downloadCleanerLoading() || downloadCleanerError()"
+      *ngIf="downloadCleanerLoading() || downloadCleanerLoadError()"
       [loading]="downloadCleanerLoading()"
-      [error]="downloadCleanerError()"
+      [error]="downloadCleanerLoadError()"
       loadingMessage="Loading settings..."
       errorMessage="Could not connect to server"
     ></app-loading-error-state>
 
     <!-- Form Content - only shown when not loading and no error -->
-    <form *ngIf="!downloadCleanerLoading() && !downloadCleanerError()" [formGroup]="downloadCleanerForm" class="p-fluid">
+    <form *ngIf="!downloadCleanerLoading() && !downloadCleanerLoadError()" [formGroup]="downloadCleanerForm" class="p-fluid">
       <!-- Main Settings -->
       <div class="field-row">
-        <label class="field-label">Enable Download Cleaner</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('enabled')" 
+             title="Click for documentation"></i>
+          Enable Download Cleaner
+        </label>
         <div class="field-input">
           <p-checkbox formControlName="enabled" [binary]="true" inputId="dcEnabled"></p-checkbox>
           <small class="form-helper-text">When enabled, the download cleaner will run according to the schedule</small>
@@ -36,7 +38,12 @@
 
       <!-- Scheduling Mode Toggle -->
       <div class="field-row">
-        <label class="field-label">Scheduling Mode</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('useAdvancedScheduling')" 
+             title="Click for documentation"></i>
+          Scheduling Mode
+        </label>
         <div class="field-input">
           <p-selectButton
             formControlName="useAdvancedScheduling"
@@ -53,7 +60,9 @@
 
       <!-- Basic Schedule Controls - shown when useAdvancedScheduling is false -->
       <div class="field-row" formGroupName="jobSchedule" *ngIf="!downloadCleanerForm.get('useAdvancedScheduling')?.value">
-        <label class="field-label">Run Schedule</label>
+        <label class="field-label">
+          Run Schedule
+        </label>
         <div>
           <div class="field-input schedule-input flex flex-wrap">
             <span class="schedule-label">Every</span>
@@ -82,12 +91,17 @@
 
       <!-- Advanced Schedule Controls - shown when useAdvancedScheduling is true -->
       <div class="field-row" *ngIf="downloadCleanerForm.get('useAdvancedScheduling')?.value">
-        <label class="field-label">Cron Expression</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('cronExpression')" 
+             title="Click for documentation"></i>
+          Cron Expression
+        </label>
         <div>
           <div class="field-input">
             <input type="text" pInputText formControlName="cronExpression" placeholder="0 0/5 * ? * * *" />
           </div>
-          <small *ngIf="downloadCleanerForm.get('cronExpression')?.hasError('required') && downloadCleanerForm.get('cronExpression')?.touched" class="p-error">Cron expression is required</small>
+          <small *ngIf="hasError('cronExpression', 'required')" class="p-error">Cron expression is required</small>
           <small class="form-helper-text">Enter a valid Quartz cron expression (e.g., "0 0/5 * ? * * *" runs every 5 minutes)</small>
         </div>
       </div>
@@ -96,11 +110,25 @@
       <p-accordion [multiple]="false" [value]="activeAccordionIndices" styleClass="mt-3">
         <!-- Seeding Settings -->
         <p-accordion-panel [disabled]="!downloadCleanerForm.get('enabled')?.value" [value]="0">
-          <p-accordion-header>Seeding Settings</p-accordion-header>
+          <p-accordion-header>
+            <ng-template #toggleicon let-active="active">
+              @if (active) {
+                <i class="pi pi-chevron-up"></i>
+              } @else {
+                <i class="pi pi-chevron-down"></i>
+              }
+            </ng-template>
+            Seeding Settings
+          </p-accordion-header>
           <p-accordion-content>
             <!-- Delete Private Option -->
             <div class="field-row">
-              <label class="field-label">Delete Private Torrents</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('deletePrivate')" 
+                   title="Click for documentation"></i>
+                Delete Private Torrents
+              </label>
               <div class="field-input">
                 <p-checkbox formControlName="deletePrivate" [binary]="true" inputId="deletePrivate"></p-checkbox>
                 <small class="form-helper-text">When enabled, private torrents will be deleted</small>
@@ -127,6 +155,9 @@
                     <div class="category-title">
                       <i class="pi pi-tag category-icon"></i>
                       <input type="text" pInputText formControlName="name" placeholder="Category name" class="category-name-input" />
+                      <i class="pi pi-info-circle field-info-icon" 
+                         (click)="openFieldDocs('name')" 
+                         title="Click for documentation"></i>
                     </div>
                     <button pButton type="button" icon="pi pi-trash" class="p-button-danger p-button-sm" 
                       (click)="removeCategory(i)" [disabled]="downloadCleanerForm.disabled"></button>
@@ -135,7 +166,12 @@
                   
                   <div class="category-content">
                     <div class="category-field">
-                      <label>Max Ratio</label>
+                      <label>
+                        <i class="pi pi-info-circle field-info-icon" 
+                           (click)="openFieldDocs('maxRatio')" 
+                           title="Click for documentation"></i>
+                        Max Ratio
+                      </label>
                       <div class="field-input">
                         <p-inputNumber formControlName="maxRatio" [min]="-1" [showButtons]="true" buttonLayout="horizontal"
                           [minFractionDigits]="2" [maxFractionDigits]="2" [useGrouping]="false"
@@ -148,7 +184,12 @@
                     </div>
                     
                     <div class="category-field">
-                      <label>Min Seed Time (hours)</label>
+                      <label>
+                        <i class="pi pi-info-circle field-info-icon" 
+                           (click)="openFieldDocs('minSeedTime')" 
+                           title="Click for documentation"></i>
+                        Min Seed Time (hours)
+                      </label>
                       <div class="field-input">
                         <p-inputNumber formControlName="minSeedTime" [min]="0" [showButtons]="true" buttonLayout="horizontal"
                           decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus"
@@ -160,7 +201,12 @@
                     </div>
                     
                     <div class="category-field">
-                      <label>Max Seed Time (hours)</label>
+                      <label>
+                        <i class="pi pi-info-circle field-info-icon" 
+                           (click)="openFieldDocs('maxSeedTime')" 
+                           title="Click for documentation"></i>
+                        Max Seed Time (hours)
+                      </label>
                       <div>
                         <div class="field-input">
                           <p-inputNumber formControlName="maxSeedTime" [min]="-1" [showButtons]="true" buttonLayout="horizontal"
@@ -190,10 +236,24 @@
 
         <!-- Unlinked Download Settings -->
         <p-accordion-panel [disabled]="!downloadCleanerForm.get('enabled')?.value" [value]="1">
-          <p-accordion-header>Unlinked Download Settings</p-accordion-header>
+          <p-accordion-header>
+            <ng-template #toggleicon let-active="active">
+              @if (active) {
+                <i class="pi pi-chevron-up"></i>
+              } @else {
+                <i class="pi pi-chevron-down"></i>
+              }
+            </ng-template>
+            Unlinked Download Settings
+          </p-accordion-header>
           <p-accordion-content>
             <div class="field-row">
-              <label class="field-label">Enable Unlinked Download Handling</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('unlinkedEnabled')" 
+                   title="Click for documentation"></i>
+                Enable Unlinked Download Handling
+              </label>
               <div class="field-input">
                 <p-checkbox formControlName="unlinkedEnabled" [binary]="true" inputId="unlinkedEnabled"></p-checkbox>
                 <small class="form-helper-text">Enable management of downloads that have no hardlinks</small>
@@ -202,7 +262,12 @@
 
             <!-- Unlinked Target Category -->
             <div class="field-row">
-              <label class="field-label">Target Category</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('unlinkedTargetCategory')" 
+                   title="Click for documentation"></i>
+                Target Category
+              </label>
               <div>
                 <div class="field-input">
                   <input type="text" pInputText formControlName="unlinkedTargetCategory" placeholder="Target category name" />
@@ -214,7 +279,12 @@
 
             <!-- Use Tag Option -->
             <div class="field-row">
-              <label class="field-label">Use Tag</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('unlinkedUseTag')" 
+                   title="Click for documentation"></i>
+                Use Tag
+              </label>
               <div class="field-input">
                 <p-checkbox formControlName="unlinkedUseTag" [binary]="true" inputId="unlinkedUseTag"></p-checkbox>
                 <small class="form-helper-text">When enabled, uses a tag instead of category (qBittorrent only)</small>
@@ -223,7 +293,12 @@
 
             <!-- Ignored Root Directory -->
             <div class="field-row">
-              <label class="field-label">Ignored Root Directory</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('unlinkedIgnoredRootDir')" 
+                   title="Click for documentation"></i>
+                Ignored Root Directory
+              </label>
               <div>
                 <div class="field-input">
                   <input type="text" pInputText formControlName="unlinkedIgnoredRootDir" placeholder="/path/to/directory" />
@@ -234,9 +309,21 @@
 
             <!-- Unlinked Categories -->
             <div class="field-row">
-              <label class="field-label">Unlinked Categories</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('unlinkedCategories')" 
+                   title="Click for documentation"></i>
+                Unlinked Categories
+              </label>
               <div>
                 <div class="field-input">
+                  <!-- Mobile-friendly autocomplete -->
+                  <app-mobile-autocomplete
+                    formControlName="unlinkedCategories"
+                    placeholder="Add category"
+                  ></app-mobile-autocomplete>
+                  
+                  <!-- Desktop autocomplete -->
                   <p-autocomplete
                     formControlName="unlinkedCategories"
                     multiple
@@ -245,6 +332,7 @@
                     [suggestions]="unlinkedCategoriesSuggestions"
                     (completeMethod)="onUnlinkedCategoriesComplete($event)"
                     placeholder="Add category and press Enter"
+                    class="desktop-only"
                   >
                   </p-autocomplete>
                 </div>

@@ -19,7 +19,7 @@ public partial class TransmissionService
 
         if (download?.FileStats is null || download.FileStats.Length == 0)
         {
-            _logger.LogDebug("failed to find torrent {hash} in the download client", hash);
+            _logger.LogDebug("failed to find torrent {hash} in the {name} download client", hash, _downloadClientConfig.Name);
             return result;
         }
         
@@ -62,19 +62,30 @@ public partial class TransmissionService
         {
             if (download.FileStats?[i].Wanted == null)
             {
+                _logger.LogTrace("Skipping file with no stats | {file}", download.Files[i].Name);
                 continue;
             }
 
             totalFiles++;
             
+            if (IsDefinitelyMalware(download.Files[i].Name))
+            {
+                _logger.LogInformation("malware file found | {file} | {title}", download.Files[i].Name, download.Name);
+                result.ShouldRemove = true;
+                result.DeleteReason = DeleteReason.MalwareFileFound;
+                return result;
+            }
+            
             if (!download.FileStats[i].Wanted.Value)
             {
+                _logger.LogTrace("File is already skipped | {file}", download.Files[i].Name);
                 totalUnwantedFiles++;
                 continue;
             }
 
             if (_filenameEvaluator.IsValid(download.Files[i].Name, blocklistType, patterns, regexes))
             {
+                _logger.LogTrace("File is valid | {file}", download.Files[i].Name);
                 continue;
             }
             
@@ -85,15 +96,18 @@ public partial class TransmissionService
 
         if (unwantedFiles.Count is 0)
         {
+            _logger.LogDebug("No unwanted files found for {name}", download.Name);
             return result;
         }
 
         if (totalUnwantedFiles == totalFiles)
         {
+            _logger.LogDebug("All files are blocked for {name}", download.Name);
             result.ShouldRemove = true;
+            result.DeleteReason = DeleteReason.AllFilesBlocked;
         }
         
-        _logger.LogDebug("marking {count} unwanted files as skipped for {name}", totalUnwantedFiles, download.Name);
+        _logger.LogDebug("Marking {count} unwanted files as skipped for {name}", totalUnwantedFiles, download.Name);
 
         await _dryRunInterceptor.InterceptAsync(SetUnwantedFiles, download.Id, unwantedFiles.ToArray());
 

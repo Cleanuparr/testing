@@ -5,7 +5,8 @@ import { Subject, takeUntil } from "rxjs";
 import { DownloadClientConfigStore } from "./download-client-config.store";
 import { CanComponentDeactivate } from "../../core/guards";
 import { ClientConfig, DownloadClientConfig, CreateDownloadClientDto } from "../../shared/models/download-client-config.model";
-import { DownloadClientType } from "../../shared/models/enums";
+import { DownloadClientType, DownloadClientTypeName } from "../../shared/models/enums";
+import { DocumentationService } from "../../core/services/documentation.service";
 
 // PrimeNG Components
 import { CardModule } from "primeng/card";
@@ -55,11 +56,7 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
   editingClient: ClientConfig | null = null;
 
   // Download client type options
-  clientTypeOptions = [
-    { label: "qBittorrent", value: DownloadClientType.QBittorrent },
-    { label: "Deluge", value: DownloadClientType.Deluge },
-    { label: "Transmission", value: DownloadClientType.Transmission },
-  ];
+  typeNameOptions: { label: string, value: DownloadClientTypeName }[] = [];
 
   // Clean up subscriptions
   private destroy$ = new Subject<void>();
@@ -69,6 +66,7 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
   private notificationService = inject(NotificationService);
   private confirmationService = inject(ConfirmationService);
   private downloadClientStore = inject(DownloadClientConfigStore);
+  private documentationService = inject(DocumentationService);
 
   // Signals from store
   downloadClientConfig = this.downloadClientStore.config;
@@ -87,7 +85,7 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
     // Initialize client form for modal
     this.clientForm = this.formBuilder.group({
       name: ['', Validators.required],
-      type: [null, Validators.required],
+      typeName: [null, Validators.required],
       host: ['', [Validators.required, this.uriValidator.bind(this)]],
       username: [''],
       password: [''],
@@ -95,11 +93,19 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
       enabled: [true]
     });
 
+    // Initialize type name options
+    for (const key of Object.keys(DownloadClientTypeName)) {
+      this.typeNameOptions.push({ 
+        label: key, 
+        value: DownloadClientTypeName[key as keyof typeof DownloadClientTypeName] 
+      });
+    }
+
     // Load Download Client config data
     this.downloadClientStore.loadConfig();
 
     // Setup client type change handler
-    this.clientForm.get('type')?.valueChanges
+    this.clientForm.get('typeName')?.valueChanges
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.onClientTypeChange();
@@ -154,7 +160,7 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
    */
   hasError(form: FormGroup, controlName: string, errorName: string): boolean {
     const control = form.get(controlName);
-    return control !== null && control.hasError(errorName) && control.touched;
+    return control !== null && control.hasError(errorName) && control.dirty;
   }
 
   /**
@@ -182,14 +188,9 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
     this.modalMode = 'edit';
     this.editingClient = client;
     
-    // Map backend type to frontend type
-    const frontendType = client.typeName 
-      ? this.mapClientTypeFromBackend(client.typeName)
-      : client.type;
-    
     this.clientForm.patchValue({
       name: client.name,
-      type: frontendType,
+      typeName: client.typeName,
       host: client.host,
       username: client.username,
       password: client.password,
@@ -220,28 +221,27 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
     }
 
     const formValue = this.clientForm.value;
-    const mappedType = this.mapClientTypeForBackend(formValue.type);
-    
-    const clientData: CreateDownloadClientDto = {
-      name: formValue.name,
-      typeName: mappedType.typeName,
-      type: mappedType.type,
-      host: formValue.host,
-      username: formValue.username,
-      password: formValue.password,
-      urlBase: formValue.urlBase,
-      enabled: formValue.enabled
-    };
 
     if (this.modalMode === 'add') {
+      const clientData: CreateDownloadClientDto = {
+        name: formValue.name,
+        type: this.mapTypeNameToType(formValue.typeName),
+        typeName: formValue.typeName,
+        host: formValue.host,
+        username: formValue.username,
+        password: formValue.password,
+        urlBase: formValue.urlBase,
+        enabled: formValue.enabled
+      };
+      
       this.downloadClientStore.createClient(clientData);
     } else if (this.editingClient) {
       // For updates, create a proper ClientConfig object
       const clientConfig: ClientConfig = {
-        id: this.editingClient.id!,
+        id: this.editingClient.id,
         name: formValue.name,
-        type: formValue.type, // Keep the frontend enum type
-        typeName: mappedType.typeName,
+        type: this.mapTypeNameToType(formValue.typeName),
+        typeName: formValue.typeName,
         host: formValue.host,
         username: formValue.username,
         password: formValue.password,
@@ -323,64 +323,72 @@ export class DownloadClientSettingsComponent implements OnDestroy, CanComponentD
   }
 
   /**
-   * Map frontend client type to backend TypeName and Type
+   * Map typeName to type category
    */
-  private mapClientTypeForBackend(frontendType: DownloadClientType): { typeName: string, type: string } {
-    switch (frontendType) {
-      case DownloadClientType.QBittorrent:
-        return { typeName: 'qBittorrent', type: 'Torrent' };
-      case DownloadClientType.Deluge:
-        return { typeName: 'Deluge', type: 'Torrent' };
-      case DownloadClientType.Transmission:
-        return { typeName: 'Transmission', type: 'Torrent' };
+  private mapTypeNameToType(typeName: DownloadClientTypeName): DownloadClientType {
+    switch (typeName) {
+      case DownloadClientTypeName.qBittorrent:
+      case DownloadClientTypeName.Deluge:
+      case DownloadClientTypeName.Transmission:
+      case DownloadClientTypeName.uTorrent:
+        return DownloadClientType.Torrent;
       default:
-        return { typeName: 'QBittorrent', type: 'Torrent' };
+        throw new Error(`Unknown client type name: ${typeName}`);
     }
   }
   
   /**
-   * Map backend TypeName to frontend client type
-   */
-  private mapClientTypeFromBackend(backendTypeName: string): DownloadClientType {
-    switch (backendTypeName) {
-      case 'QBittorrent':
-        return DownloadClientType.QBittorrent;
-      case 'Deluge':
-        return DownloadClientType.Deluge;
-      case 'Transmission':
-        return DownloadClientType.Transmission;
-      default:
-        return DownloadClientType.QBittorrent;
-    }
-  }
-
-  /**
    * Handle client type changes to update validation
    */
   onClientTypeChange(): void {
-    const clientType = this.clientForm.get('type')?.value;
+    const clientTypeName = this.clientForm.get('typeName')?.value;
     const hostControl = this.clientForm.get('host');
+    const usernameControl = this.clientForm.get('username');
+    const urlBaseControl = this.clientForm.get('urlBase');
     
-    if (!hostControl) return;
+    if (!hostControl || !usernameControl || !urlBaseControl) return;
     
     hostControl.setValidators([
       Validators.required, 
       this.uriValidator.bind(this)
     ]);
     
+    // Clear username value and remove validation for Deluge
+    if (clientTypeName === DownloadClientTypeName.Deluge) {
+      usernameControl.setValue('');
+      usernameControl.clearValidators();
+    }
+    
+    // Set default URL base for Transmission
+    if (clientTypeName === DownloadClientTypeName.Transmission) {
+      urlBaseControl.setValue('transmission');
+    }
+    
     // Update validation state
     hostControl.updateValueAndValidity();
+    usernameControl.updateValueAndValidity();
+  }
+
+  /**
+   * Check if username field should be shown (hidden for Deluge)
+   */
+  shouldShowUsernameField(): boolean {
+    const clientTypeName = this.clientForm.get('typeName')?.value;
+    return clientTypeName !== DownloadClientTypeName.Deluge;
   }
 
   /**
    * Get client type label for display
    */
   getClientTypeLabel(client: ClientConfig): string {
-    const frontendType = client.typeName 
-      ? this.mapClientTypeFromBackend(client.typeName)
-      : client.type;
-    
-    const option = this.clientTypeOptions.find(opt => opt.value === frontendType);
+    const option = this.typeNameOptions.find(opt => opt.value === client.typeName);
     return option?.label || 'Unknown';
+  }
+
+  /**
+   * Open field-specific documentation
+   */
+  openFieldDocs(fieldName: string): void {
+    this.documentationService.openFieldDocumentation('download-client', fieldName);
   }
 }

@@ -19,22 +19,22 @@ namespace Cleanuparr.Infrastructure.Features.ContentBlocker;
 public sealed class BlocklistProvider
 {
     private readonly ILogger<BlocklistProvider> _logger;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly Dictionary<InstanceType, string> _configHashes = new();
     private static DateTime _lastLoadTime = DateTime.MinValue;
-    private const int LoadIntervalHours = 6;
+    private const int LoadIntervalHours = 4;
 
     public BlocklistProvider(
         ILogger<BlocklistProvider> logger,
-        IServiceProvider serviceProvider,
+        IServiceScopeFactory scopeFactory,
         IMemoryCache cache,
         IHttpClientFactory httpClientFactory
     )
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
         _cache = cache;
         _httpClient = httpClientFactory.CreateClient(Constants.HttpClientWithRetryName);
     }
@@ -43,7 +43,8 @@ public sealed class BlocklistProvider
     {
         try
         {
-            var dataContext = _serviceProvider.GetRequiredService<DataContext>();
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            await using var dataContext = scope.ServiceProvider.GetRequiredService<DataContext>();
             int changedCount = 0;
             var contentBlockerConfig = await dataContext.ContentBlockerConfigs
                 .AsNoTracking()
@@ -92,6 +93,28 @@ public sealed class BlocklistProvider
                 
                 await LoadPatternsAndRegexesAsync(contentBlockerConfig.Lidarr, InstanceType.Lidarr);
                 _configHashes[InstanceType.Lidarr] = lidarrHash;
+                changedCount++;
+            }
+            
+            // Check and update Lidarr blocklist if needed
+            string readarrHash = GenerateSettingsHash(contentBlockerConfig.Readarr);
+            if (shouldReload || !_configHashes.TryGetValue(InstanceType.Readarr, out string? oldReadarrHash) || readarrHash != oldReadarrHash)
+            {
+                _logger.LogDebug("Loading Readarr blocklist");
+                
+                await LoadPatternsAndRegexesAsync(contentBlockerConfig.Readarr, InstanceType.Readarr);
+                _configHashes[InstanceType.Readarr] = readarrHash;
+                changedCount++;
+            }
+            
+            // Check and update Whisparr blocklist if needed
+            string whisparrHash = GenerateSettingsHash(contentBlockerConfig.Whisparr);
+            if (shouldReload || !_configHashes.TryGetValue(InstanceType.Whisparr, out string? oldWhisparrHash) || whisparrHash != oldWhisparrHash)
+            {
+                _logger.LogDebug("Loading Whisparr blocklist");
+                
+                await LoadPatternsAndRegexesAsync(contentBlockerConfig.Whisparr, InstanceType.Whisparr);
+                _configHashes[InstanceType.Whisparr] = whisparrHash;
                 changedCount++;
             }
             

@@ -12,5 +12,5 @@ public sealed record SonarrCommand
     
     public List<long>? EpisodeIds { get; set; }
     
-    public SonarrSearchType SearchType { get; set; }
+    public SeriesSearchType SearchType { get; set; }
 }

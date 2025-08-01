@@ -4,7 +4,6 @@ using Cleanuparr.Domain.Entities.Deluge.Response;
 using Cleanuparr.Domain.Exceptions;
 using Cleanuparr.Infrastructure.Features.DownloadClient.Deluge.Extensions;
 using Cleanuparr.Persistence.Models.Configuration;
-using Data.Models.Deluge.Exceptions;
 using Newtonsoft.Json;
 
 namespace Cleanuparr.Infrastructure.Features.DownloadClient.Deluge;
@@ -168,9 +167,7 @@ public sealed class DelugeClient
         content.Headers.ContentType = new MediaTypeWithQualityHeaderValue("application/json");
         
         UriBuilder uriBuilder = new(_config.Url);
-        uriBuilder.Path = string.IsNullOrEmpty(_config.UrlBase)
-            ? $"{uriBuilder.Path.TrimEnd('/')}/json"
-            : $"{uriBuilder.Path.TrimEnd('/')}/{_config.UrlBase.TrimStart('/').TrimEnd('/')}/json";
+        uriBuilder.Path = $"{uriBuilder.Path.TrimEnd('/')}/json";
         var responseMessage = await _httpClient.PostAsync(uriBuilder.Uri, content);
         responseMessage.EnsureSuccessStatusCode();
 

@@ -21,7 +21,7 @@ public partial class DelugeService
         
         if (download?.Hash is null)
         {
-            _logger.LogDebug("failed to find torrent {hash} in the download client", hash);
+            _logger.LogDebug("failed to find torrent {hash} in the {name} download client", hash, _downloadClientConfig.Name);
             return result;
         }
         
@@ -52,7 +52,7 @@ public partial class DelugeService
         }
         catch (Exception exception)
         {
-            _logger.LogDebug(exception, "failed to find torrent {hash} in the download client", hash);
+            _logger.LogDebug(exception, "failed to find files in the download client | {name}", download.Name);
         }
 
         if (contents is null)
@@ -75,8 +75,21 @@ public partial class DelugeService
             totalFiles++;
             int priority = file.Priority;
 
+            if (result.ShouldRemove)
+            {
+                return;
+            }
+            
+            if (IsDefinitelyMalware(name))
+            {
+                _logger.LogInformation("malware file found | {file} | {title}", file.Path, download.Name);
+                result.ShouldRemove = true;
+                result.DeleteReason = DeleteReason.MalwareFileFound;
+            }
+
             if (file.Priority is 0)
             {
+                _logger.LogTrace("File is already skipped | {file}", file.Path);
                 totalUnwantedFiles++;
             }
 
@@ -88,8 +101,14 @@ public partial class DelugeService
                 _logger.LogInformation("unwanted file found | {file}", file.Path);
             }
             
+            _logger.LogTrace("File is valid | {file}", file.Path);
             priorities.Add(file.Index, priority);
         });
+
+        if (result.ShouldRemove)
+        {
+            return result;
+        }
 
         if (!hasPriorityUpdates)
         {
@@ -105,8 +124,12 @@ public partial class DelugeService
 
         if (totalUnwantedFiles == totalFiles)
         {
+            _logger.LogDebug("All files are blocked for {name}", download.Name);
             result.ShouldRemove = true;
+            result.DeleteReason = DeleteReason.AllFilesBlocked;
         }
+        
+        _logger.LogDebug("Marking {count} unwanted files as skipped for {name}", totalUnwantedFiles, download.Name);
 
         await _dryRunInterceptor.InterceptAsync(ChangeFilesPriority, hash, sortedPriorities);
 

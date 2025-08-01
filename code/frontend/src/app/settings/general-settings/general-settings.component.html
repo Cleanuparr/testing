@@ -7,9 +7,6 @@
         <h2 class="card-title m-0">General Configuration</h2>
         <span class="card-subtitle">Configure general application settings</span>
       </div>
-      <div class="flex align-items-center gap-2">
-        <i class="pi pi-cog text-xl"></i>
-      </div>
     </div>
   </ng-template>
 
@@ -23,20 +20,32 @@
       errorMessage="Could not connect to server"
     ></app-loading-error-state>
 
-    <!-- Settings Form -->
-    <form *ngIf="!generalLoading() && !generalError()" [formGroup]="generalForm" class="p-fluid">
-      <!-- Display Support Banner -->
-      <div class="field-row">
-        <label class="field-label">Display Support Banner</label>
-        <div class="field-input">
-          <p-checkbox formControlName="displaySupportBanner" [binary]="true" inputId="displaySupportBanner"></p-checkbox>
-          <small class="form-helper-text">Show the support section on the dashboard with links to GitHub and sponsors</small>
+          <!-- Settings Form -->
+      <form *ngIf="!generalLoading() && !generalError()" [formGroup]="generalForm" class="p-fluid">
+        <!-- Display Support Banner -->
+        <div class="field-row">
+          <label class="field-label">
+            <i class="pi pi-info-circle field-info-icon" 
+               (click)="openFieldDocs('displaySupportBanner')"
+               title="Click for documentation">
+            </i>
+            Display Support Banner
+          </label>
+          <div class="field-input">
+            <p-checkbox formControlName="displaySupportBanner" [binary]="true" inputId="displaySupportBanner"></p-checkbox>
+            <small class="form-helper-text">Show the support section on the dashboard with links to GitHub and sponsors</small>
+          </div>
         </div>
-      </div>
 
-      <!-- Dry Run -->
+        <!-- Dry Run -->
       <div class="field-row">
-        <label class="field-label">Dry Run</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('dryRun')"
+             title="Click for documentation">
+          </i>
+          Dry Run
+        </label>
         <div class="field-input">
           <p-checkbox formControlName="dryRun" [binary]="true" inputId="dryRun"></p-checkbox>
           <small class="form-helper-text">When enabled, no changes will be made to the system</small>
@@ -45,7 +54,13 @@
 
       <!-- HTTP Settings -->
       <div class="field-row">
-        <label class="field-label">Maximum HTTP Retries</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('httpMaxRetries')"
+             title="Click for documentation">
+          </i>
+          Maximum HTTP Retries
+        </label>
         <div>
           <div class="field-input">
             <p-inputNumber
@@ -63,7 +78,13 @@
       </div>
 
       <div class="field-row">
-        <label class="field-label">HTTP Timeout (seconds)</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('httpTimeout')"
+             title="Click for documentation">
+          </i>
+          HTTP Timeout (seconds)
+        </label>
         <div>
           <div class="field-input">
             <p-inputNumber
@@ -81,7 +102,13 @@
       </div>
 
       <div class="field-row">
-        <label class="field-label">Certificate Validation</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('httpCertificateValidation')"
+             title="Click for documentation">
+          </i>
+          Certificate Validation
+        </label>
         <div class="field-input">
           <p-select
             formControlName="httpCertificateValidation"
@@ -96,7 +123,13 @@
 
       <!-- Search Settings -->
       <div class="field-row">
-        <label class="field-label">Enable Search</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('searchEnabled')"
+             title="Click for documentation">
+          </i>
+          Enable Search
+        </label>
         <div class="field-input">
           <p-checkbox formControlName="searchEnabled" [binary]="true" inputId="searchEnabled"></p-checkbox>
           <small class="form-helper-text">When enabled, the application will trigger a search after removing a download</small>
@@ -104,7 +137,13 @@
       </div>
 
       <div class="field-row">
-        <label class="field-label">Search Delay (seconds)</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('searchDelay')"
+             title="Click for documentation">
+          </i>
+          Search Delay (seconds)
+        </label>
         <div>
           <div class="field-input">
             <p-inputNumber
@@ -123,7 +162,13 @@
 
       <!-- Log Level -->
       <div class="field-row">
-        <label class="field-label">Log Level</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('logLevel')"
+             title="Click for documentation">
+          </i>
+          Log Level
+        </label>
         <div class="field-input">
           <p-select 
             formControlName="logLevel" 
@@ -138,8 +183,21 @@
 
       <!-- Ignored Downloads -->
       <div class="field-row">
-        <label class="field-label">Ignored Downloads</label>
+        <label class="field-label">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('ignoredDownloads')"
+             title="Click for documentation">
+          </i>
+          Ignored Downloads
+        </label>
         <div class="field-input">
+          <!-- Mobile-friendly autocomplete -->
+          <app-mobile-autocomplete
+            formControlName="ignoredDownloads"
+            placeholder="Add download pattern"
+          ></app-mobile-autocomplete>
+          
+          <!-- Desktop autocomplete -->
           <p-autocomplete
             formControlName="ignoredDownloads"
             inputId="ignoredDownloads"
@@ -147,8 +205,9 @@
             fluid
             [typeahead]="false"
             placeholder="Add download pattern and press enter"
+            class="desktop-only"
           ></p-autocomplete>
-          <small class="form-helper-text">Downloads matching these patterns will be ignored</small>
+          <small class="form-helper-text">Downloads matching these patterns will be ignored (e.g. hash, tag, category, label, tracker)</small>
         </div>
       </div>
 

@@ -12,7 +12,7 @@ public partial class QBitService
     /// <inheritdoc/>
     public override async Task<List<object>?> GetSeedingDownloads()
     {
-        var torrentList = await _client.GetTorrentListAsync(new TorrentListQuery { Filter = TorrentListFilter.Seeding });
+        var torrentList = await _client.GetTorrentListAsync(new TorrentListQuery { Filter = TorrentListFilter.Completed });
         return torrentList?.Where(x => !string.IsNullOrEmpty(x.Hash))
             .Cast<object>()
             .ToList();
@@ -97,7 +97,7 @@ public partial class QBitService
 
                 if (torrentProperties is null)
                 {
-                    _logger.LogDebug("failed to find torrent properties in the download client | {name}", download.Name);
+                    _logger.LogError("Failed to find torrent properties | {name}", download.Name);
                     return;
                 }
 
@@ -238,6 +238,8 @@ public partial class QBitService
             }
 
             await _dryRunInterceptor.InterceptAsync(ChangeCategory, download.Hash, downloadCleanerConfig.UnlinkedTargetCategory);
+            
+            await _eventPublisher.PublishCategoryChanged(download.Category, downloadCleanerConfig.UnlinkedTargetCategory, downloadCleanerConfig.UnlinkedUseTag);
 
             if (downloadCleanerConfig.UnlinkedUseTag)
             {
@@ -248,8 +250,6 @@ public partial class QBitService
                 _logger.LogInformation("category changed for {name}", download.Name);
                 download.Category = downloadCleanerConfig.UnlinkedTargetCategory;
             }
-
-            await _eventPublisher.PublishCategoryChanged(download.Category, downloadCleanerConfig.UnlinkedTargetCategory, downloadCleanerConfig.UnlinkedUseTag);
         }
     }
 

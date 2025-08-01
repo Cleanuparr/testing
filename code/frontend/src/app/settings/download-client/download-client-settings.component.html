@@ -25,9 +25,6 @@
             <h2 class="card-title m-0">Download Clients</h2>
             <span class="card-subtitle">Manage download client instances</span>
           </div>
-          <div class="flex align-items-center gap-2">
-            <i class="pi pi-download text-xl"></i>
-          </div>
         </div>
       </ng-template>
 
@@ -117,7 +114,12 @@
 >
   <form [formGroup]="clientForm" class="p-fluid instance-form">
     <div class="field flex flex-row">
-      <label class="field-label">Enabled</label>
+      <label class="field-label">
+        <i class="pi pi-info-circle field-info-icon" 
+           (click)="openFieldDocs('enabled')" 
+           pTooltip="Click for documentation"></i>
+        Enabled
+      </label>
       <div class="field-input">
         <p-checkbox formControlName="enabled" [binary]="true"></p-checkbox>
         <small class="form-helper-text">Enable this download client</small>
@@ -125,7 +127,12 @@
     </div>
 
     <div class="field">
-      <label for="client-name">Name *</label>
+      <label for="client-name">
+        <i class="pi pi-info-circle field-info-icon" 
+           (click)="openFieldDocs('name')" 
+           pTooltip="Click for documentation"></i>
+        Name *
+      </label>
       <input 
         id="client-name"
         type="text" 
@@ -138,23 +145,33 @@
     </div>
 
     <div class="field">
-      <label for="client-type">Client Type *</label>
+      <label for="client-type">
+        <i class="pi pi-info-circle field-info-icon" 
+           (click)="openFieldDocs('typeName')" 
+           pTooltip="Click for documentation"></i>
+        Client Type *
+      </label>
       <p-select
         id="client-type"
-        formControlName="type"
-        [options]="clientTypeOptions"
+        formControlName="typeName"
+        [options]="typeNameOptions"
         optionLabel="label"
         optionValue="value"
         placeholder="Select client type"
         appendTo="body"
         class="w-full"
       ></p-select>
-      <small *ngIf="hasError(clientForm, 'type', 'required')" class="p-error">Client type is required</small>
+      <small *ngIf="hasError(clientForm, 'typeName', 'required')" class="p-error">Client type is required</small>
     </div>
 
     <ng-container>
       <div class="field">
-        <label for="client-host">Host *</label>
+        <label for="client-host">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('host')" 
+             pTooltip="Click for documentation"></i>
+          Host *
+        </label>
         <input 
           id="client-host"
           type="text" 
@@ -169,7 +186,12 @@
       </div>
       
       <div class="field">
-        <label for="client-urlbase">URL Base</label>
+        <label for="client-urlbase">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('urlBase')" 
+             pTooltip="Click for documentation"></i>
+          URL Base
+        </label>
         <input 
           id="client-urlbase"
           type="text" 
@@ -180,20 +202,30 @@
         />
       </div>
       
-      <div class="field">
-        <label for="client-username">Username</label>
-        <input 
-          id="client-username"
-          type="text" 
-          pInputText 
-          formControlName="username" 
-          placeholder="Username"
-          class="w-full"
-        />
-      </div>
+              <div class="field" *ngIf="shouldShowUsernameField()">
+          <label for="client-username">
+            <i class="pi pi-info-circle field-info-icon" 
+               (click)="openFieldDocs('username')" 
+               pTooltip="Click for documentation"></i>
+            Username
+          </label>
+          <input 
+            id="client-username"
+            type="text" 
+            pInputText 
+            formControlName="username" 
+            placeholder="Username"
+            class="w-full"
+          />
+        </div>
       
       <div class="field">
-        <label for="client-password">Password</label>
+        <label for="client-password">
+          <i class="pi pi-info-circle field-info-icon" 
+             (click)="openFieldDocs('password')" 
+             pTooltip="Click for documentation"></i>
+          Password
+        </label>
         <input 
           id="client-password"
           type="password" 

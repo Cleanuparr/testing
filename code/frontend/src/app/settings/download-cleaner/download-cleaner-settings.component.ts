@@ -11,6 +11,7 @@ import {
   createDefaultCategory
 } from "../../shared/models/download-cleaner-config.model";
 import { ScheduleUnit, ScheduleOptions } from "../../shared/models/queue-cleaner-config.model";
+import { MobileAutocompleteComponent } from "../../shared/components/mobile-autocomplete/mobile-autocomplete.component";
 
 // PrimeNG Components
 import { CardModule } from "primeng/card";
@@ -30,6 +31,8 @@ import { TableModule } from "primeng/table";
 import { LoadingErrorStateComponent } from "../../shared/components/loading-error-state/loading-error-state.component";
 import { ConfirmDialogModule } from "primeng/confirmdialog";
 import { ConfirmationService } from "primeng/api";
+import { ErrorHandlerUtil } from "../../core/utils/error-handler.util";
+import { DocumentationService } from "../../core/services/documentation.service";
 
 @Component({
   selector: "app-download-cleaner-settings",
@@ -52,9 +55,10 @@ import { ConfirmationService } from "primeng/api";
     TableModule,
     LoadingErrorStateComponent,
     ConfirmDialogModule,
-    NgIf
+    NgIf,
+    MobileAutocompleteComponent,
   ],
-  providers: [DownloadCleanerConfigStore, ConfirmationService],
+  providers: [ConfirmationService],
   templateUrl: "./download-cleaner-settings.component.html",
   styleUrls: ["./download-cleaner-settings.component.scss"],
 })
@@ -65,14 +69,16 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   // Services
   private formBuilder = inject(FormBuilder);
   private notificationService = inject(NotificationService);
-  private downloadCleanerStore = inject(DownloadCleanerConfigStore);
+  readonly downloadCleanerStore = inject(DownloadCleanerConfigStore);
   private confirmationService = inject(ConfirmationService);
+  private documentationService = inject(DocumentationService);
   
   // Configuration signals
   readonly downloadCleanerConfig = this.downloadCleanerStore.config;
   readonly downloadCleanerLoading = this.downloadCleanerStore.loading;
   readonly downloadCleanerSaving = this.downloadCleanerStore.saving;
-  readonly downloadCleanerError = this.downloadCleanerStore.error;
+  readonly downloadCleanerLoadError = this.downloadCleanerStore.loadError;  // Only for "Not connected" state
+  readonly downloadCleanerSaveError = this.downloadCleanerStore.saveError;  // Only for toast notifications
   
   // Form and state
   downloadCleanerForm!: FormGroup;
@@ -123,6 +129,14 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
     return !this.downloadCleanerForm?.dirty || !this.formValuesChanged();
   }
 
+  /**
+   * Opens field-specific documentation
+   * @param fieldName Field name to open documentation for
+   */
+  openFieldDocs(fieldName: string): void {
+    this.documentationService.openFieldDocumentation('download-cleaner', fieldName);
+  }
+
   constructor() {
     // Initialize the form with proper disabled states for dependent controls
     this.downloadCleanerForm = this.formBuilder.group({
@@ -150,12 +164,30 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       }
     });
     
-    // Effect to handle errors
+    // Effect to handle load errors - emit to LoadingErrorStateComponent for "Not connected" display
     effect(() => {
-      const errorMessage = this.downloadCleanerError();
-      if (errorMessage) {
-        // Only emit the error for parent components
-        this.error.emit(errorMessage);
+      const loadErrorMessage = this.downloadCleanerLoadError();
+      if (loadErrorMessage) {
+        // Load errors should be shown as "Not connected to server" in LoadingErrorStateComponent
+        this.error.emit(loadErrorMessage);
+      }
+    });
+    
+    // Effect to handle save errors - show as toast notifications for user to fix
+    effect(() => {
+      const saveErrorMessage = this.downloadCleanerSaveError();
+      if (saveErrorMessage) {
+        // Check if this looks like a validation error from the backend
+        // These are typically user-fixable errors that should be shown as toasts
+        const isUserFixableError = ErrorHandlerUtil.isUserFixableError(saveErrorMessage);
+        
+        if (isUserFixableError) {
+          // Show validation errors as toast notifications so user can fix them
+          this.notificationService.showError(saveErrorMessage);
+        } else {
+          // For non-user-fixable save errors, also emit to parent
+          this.error.emit(saveErrorMessage);
+        }
       }
     });
     
@@ -330,21 +362,27 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
         .pipe(takeUntil(this.destroy$))
         .subscribe(useAdvanced => {
           const enabled = this.downloadCleanerForm.get('enabled')?.value || false;
-          if (enabled) {
-            const cronExpressionControl = this.downloadCleanerForm.get('cronExpression');
-            const jobScheduleGroup = this.downloadCleanerForm.get('jobSchedule') as FormGroup;
-            const everyControl = jobScheduleGroup?.get('every');
-            const typeControl = jobScheduleGroup?.get('type');
-            
-            if (useAdvanced) {
-              if (cronExpressionControl) cronExpressionControl.enable();
-              if (everyControl) everyControl.disable();
-              if (typeControl) typeControl.disable();
-            } else {
-              if (cronExpressionControl) cronExpressionControl.disable();
-              if (everyControl) everyControl.enable();
-              if (typeControl) typeControl.enable();
-            }
+          const cronExpressionControl = this.downloadCleanerForm.get('cronExpression');
+          const jobScheduleGroup = this.downloadCleanerForm.get('jobSchedule') as FormGroup;
+          const everyControl = jobScheduleGroup?.get('every');
+          const typeControl = jobScheduleGroup?.get('type');
+          
+          // Update scheduling controls based on mode, regardless of enabled state
+          if (useAdvanced) {
+            if (cronExpressionControl) cronExpressionControl.enable();
+            if (everyControl) everyControl.disable();
+            if (typeControl) typeControl.disable();
+          } else {
+            if (cronExpressionControl) cronExpressionControl.disable();
+            if (everyControl) everyControl.enable();
+            if (typeControl) typeControl.enable();
+          }
+          
+          // Then respect the main enabled state - if disabled, disable all scheduling controls
+          if (!enabled) {
+            cronExpressionControl?.disable();
+            everyControl?.disable();
+            typeControl?.disable();
           }
         });
     }
@@ -431,19 +469,14 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
    * Update form control disabled states based on the configuration
    */
   private updateFormControlDisabledStates(config: DownloadCleanerConfig): void {
-    // Update main controls based on enabled state
+    // Update main form controls based on the 'enabled' state
     this.updateMainControlsState(config.enabled);
     
-    // Update schedule controls based on advanced scheduling
-    const cronControl = this.downloadCleanerForm.get('cronExpression');
-    const jobScheduleControl = this.downloadCleanerForm.get('jobSchedule');
-
-    if (config.useAdvancedScheduling) {
-      jobScheduleControl?.disable({ emitEvent: false });
-      cronControl?.enable({ emitEvent: false });
-    } else {
-      cronControl?.disable({ emitEvent: false });
-      jobScheduleControl?.enable({ emitEvent: false });
+    // Update other dependent controls only if the main feature is enabled
+    if (config.enabled) {
+      // Update unlinked controls based on current unlinkedEnabled value
+      const unlinkedEnabled = config.unlinkedEnabled || false;
+      this.updateUnlinkedControlsState(unlinkedEnabled);
     }
   }
   
@@ -520,14 +553,17 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       // Get form values including disabled controls
       const formValues = this.downloadCleanerForm.getRawValue();
 
+      // Determine the correct cron expression to use
+      const cronExpression: string = formValues.useAdvancedScheduling ?
+        formValues.cronExpression :
+        // If in basic mode, generate cron expression from the schedule
+        this.downloadCleanerStore.generateCronExpression(formValues.jobSchedule);
+
       // Create config object from form values
       const config: DownloadCleanerConfig = {
         enabled: formValues.enabled,
         useAdvancedScheduling: formValues.useAdvancedScheduling,
-        cronExpression: formValues.useAdvancedScheduling ? 
-          formValues.cronExpression : 
-          // If in basic mode, generate cron expression from the schedule
-          this.downloadCleanerStore.generateCronExpression(formValues.jobSchedule),
+        cronExpression: cronExpression,
         jobSchedule: formValues.jobSchedule,
         categories: formValues.categories,
         deletePrivate: formValues.deletePrivate,
@@ -544,9 +580,9 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       // Setup a one-time check to mark form as pristine after successful save
       const checkSaveCompletion = () => {
         const saving = this.downloadCleanerSaving();
-        const error = this.downloadCleanerError();
+        const saveError = this.downloadCleanerSaveError();
         
-        if (!saving && !error) {
+        if (!saving && !saveError) {
           // Mark form as pristine after successful save
           this.downloadCleanerForm.markAsPristine();
           // Update original values reference
@@ -555,9 +591,9 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
           this.saved.emit();
           // Display success message
           this.notificationService.showSuccess('Download cleaner configuration saved successfully');
-        } else if (!saving && error) {
-          // If there's an error, we can stop checking
-          // No need to show error toast here, it's handled by the LoadingErrorStateComponent
+        } else if (!saving && saveError) {
+          // If there's a save error, we can stop checking
+          // Toast notification is already handled by the effect above
         } else {
           // If still saving, check again in a moment
           setTimeout(checkSaveCompletion, 100);
@@ -624,14 +660,14 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
    */
   hasError(controlName: string, errorName: string): boolean {
     const control = this.downloadCleanerForm.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
   
   /**
    * Check if the form has the unlinked categories validation error
    */
   hasUnlinkedCategoriesError(): boolean {
-    return this.downloadCleanerForm.touched && this.downloadCleanerForm.hasError('unlinkedCategoriesRequired');
+    return this.downloadCleanerForm.dirty && this.downloadCleanerForm.hasError('unlinkedCategoriesRequired');
   }
   
   /**
@@ -659,7 +695,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
     }
 
     const control = parentControl.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
 
   /**
@@ -670,7 +706,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
     if (!categoryGroup) return false;
     
     const control = categoryGroup.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
 
   /**
@@ -679,7 +715,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   hasCategoryControlError(categoryIndex: number, controlName: string, errorName: string): boolean {
     const categoryGroup = this.categoriesFormArray.at(categoryIndex);
     const control = categoryGroup.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
   
   /**
@@ -687,7 +723,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
    */
   hasCategoryGroupError(categoryIndex: number, errorName: string): boolean {
     const categoryGroup = this.categoriesFormArray.at(categoryIndex);
-    return categoryGroup ? categoryGroup.touched && categoryGroup.hasError(errorName) : false;
+    return categoryGroup ? categoryGroup.dirty && categoryGroup.hasError(errorName) : false;
   }
 
   /**
@@ -757,7 +793,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   private showEnableConfirmationDialog(): void {
     this.confirmationService.confirm({
       header: 'Enable Download Cleaner',
-      message: 'To avoid affecting items that are awaiting to be imported, please ensure that your Sonarr, Radarr, and Lidarr instances have been properly configured prior to enabling the Download Cleaner.<br/><br/>Are you sure you want to proceed?',
+      message: 'To avoid affecting items that are awaiting to be imported, please ensure that your Sonarr, Radarr, and Lidarr instances have been configured prior to enabling the Download Cleaner.<br/><br/>Are you sure you want to proceed?',
       icon: 'pi pi-exclamation-triangle',
       acceptIcon: 'pi pi-check',
       rejectIcon: 'pi pi-times',
@@ -779,6 +815,8 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       }
     });
   }
+  
+
 
   // Add any other necessary methods here
 }

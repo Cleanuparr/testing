@@ -4,6 +4,8 @@ using Cleanuparr.Api;
 using Cleanuparr.Api.DependencyInjection;
 using Cleanuparr.Infrastructure.Logging;
 using Cleanuparr.Shared.Helpers;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -68,7 +70,7 @@ builder.Services.AddCors(options =>
 
 // Register services needed for logging first
 builder.Services
-    .AddTransient<LoggingConfigManager>()
+    .AddScoped<LoggingConfigManager>()
     .AddSingleton<SignalRLogSink>();
 
 // Add logging with proper service provider
@@ -131,21 +133,38 @@ logger.LogInformation("Server configuration: PORT={port}, BASE_PATH={basePath}",
 await app.Init();
 
 // Get LoggingConfigManager (will be created if not already registered)
-var configManager = app.Services.GetRequiredService<LoggingConfigManager>();
-        
-// Get the dynamic level switch for controlling log levels
-var levelSwitch = configManager.GetLevelSwitch();
+var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+using (var scope = scopeFactory.CreateScope())
+{
+    var configManager = scope.ServiceProvider.GetRequiredService<LoggingConfigManager>();
+    
+    // Get the dynamic level switch for controlling log levels
+    var levelSwitch = configManager.GetLevelSwitch();
             
-// Get the SignalRLogSink instance
-var signalRSink = app.Services.GetRequiredService<SignalRLogSink>();
+    // Get the SignalRLogSink instance
+    var signalRSink = app.Services.GetRequiredService<SignalRLogSink>();
 
-var logConfig = LoggingDI.GetDefaultLoggerConfiguration();
-logConfig.MinimumLevel.ControlledBy(levelSwitch);
+    var logConfig = LoggingDI.GetDefaultLoggerConfiguration();
+    logConfig.MinimumLevel.ControlledBy(levelSwitch);
         
-// Add to Serilog pipeline
-logConfig.WriteTo.Sink(signalRSink);
+    // Add to Serilog pipeline
+    logConfig.WriteTo.Sink(signalRSink);
 
-Log.Logger = logConfig.CreateLogger();
+    Log.Logger = logConfig.CreateLogger();
+}
+
+// Configure health check endpoints before the API configuration
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("liveness"),
+    ResponseWriter = HealthCheckResponseWriter.WriteMinimalPlaintext
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("readiness"),
+    ResponseWriter = HealthCheckResponseWriter.WriteMinimalPlaintext
+});
 
 app.ConfigureApi();
 

@@ -1,4 +1,5 @@
-﻿using Cleanuparr.Domain.Enums;
+﻿using Cleanuparr.Domain.Entities.Arr.Queue;
+using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Events;
 using Cleanuparr.Infrastructure.Features.Arr;
 using Cleanuparr.Infrastructure.Features.Arr.Interfaces;
@@ -12,7 +13,6 @@ using Cleanuparr.Persistence.Models.Configuration;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
 using Cleanuparr.Persistence.Models.Configuration.ContentBlocker;
 using Cleanuparr.Persistence.Models.Configuration.General;
-using Data.Models.Arr.Queue;
 using MassTransit;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -52,7 +52,7 @@ public sealed class ContentBlocker : GenericHandler
         
         var config = ContextProvider.Get<ContentBlockerConfig>();
         
-        if (!config.Sonarr.Enabled && !config.Radarr.Enabled && !config.Lidarr.Enabled)
+        if (!config.Sonarr.Enabled && !config.Radarr.Enabled && !config.Lidarr.Enabled && !config.Readarr.Enabled && !config.Whisparr.Enabled)
         {
             _logger.LogWarning("No blocklists are enabled");
             return;
@@ -63,6 +63,8 @@ public sealed class ContentBlocker : GenericHandler
         var sonarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Sonarr));
         var radarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Radarr));
         var lidarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Lidarr));
+        var readarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Readarr));
+        var whisparrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Whisparr));
 
         if (config.Sonarr.Enabled)
         {
@@ -77,6 +79,16 @@ public sealed class ContentBlocker : GenericHandler
         if (config.Lidarr.Enabled)
         {
             await ProcessArrConfigAsync(lidarrConfig, InstanceType.Lidarr);
+        }
+        
+        if (config.Readarr.Enabled)
+        {
+            await ProcessArrConfigAsync(readarrConfig, InstanceType.Readarr);
+        }
+        
+        if (config.Whisparr.Enabled)
+        {
+            await ProcessArrConfigAsync(whisparrConfig, InstanceType.Whisparr);
         }
     }
 
@@ -171,6 +183,10 @@ public sealed class ContentBlocker : GenericHandler
                             _logger.LogWarning("Download not found in any torrent client | {title}", record.Title);
                         }
                     }
+                    else
+                    {
+                        _logger.LogDebug("No torrent clients enabled");
+                    }
                 }
 
                 if (!result.ShouldRemove)
@@ -194,7 +210,7 @@ public sealed class ContentBlocker : GenericHandler
                     record,
                     group.Count() > 1,
                     removeFromClient,
-                    DeleteReason.AllFilesBlocked
+                    result.DeleteReason
                 );
             }
         });

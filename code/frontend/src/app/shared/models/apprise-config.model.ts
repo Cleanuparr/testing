@@ -1,6 +1,7 @@
 import { NotificationConfig } from './notification-config.model';
 
 export interface AppriseConfig extends NotificationConfig {
-  url?: string;
+  fullUrl?: string;
   key?: string;
+  tags?: string;
 } 

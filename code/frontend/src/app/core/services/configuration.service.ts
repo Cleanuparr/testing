@@ -6,23 +6,26 @@ import { ContentBlockerConfig, JobSchedule as ContentBlockerJobSchedule, Schedul
 import { SonarrConfig } from "../../shared/models/sonarr-config.model";
 import { RadarrConfig } from "../../shared/models/radarr-config.model";
 import { LidarrConfig } from "../../shared/models/lidarr-config.model";
+import { ReadarrConfig } from "../../shared/models/readarr-config.model";
+import { WhisparrConfig } from "../../shared/models/whisparr-config.model";
 import { ClientConfig, DownloadClientConfig, CreateDownloadClientDto } from "../../shared/models/download-client-config.model";
 import { ArrInstance, CreateArrInstanceDto } from "../../shared/models/arr-config.model";
 import { GeneralConfig } from "../../shared/models/general-config.model";
-import { BasePathService } from "./base-path.service";
+import { ApplicationPathService } from "./base-path.service";
+import { ErrorHandlerUtil } from "../utils/error-handler.util";
 
 @Injectable({
   providedIn: "root",
 })
 export class ConfigurationService {
-  private readonly basePathService = inject(BasePathService);
+  private readonly ApplicationPathService = inject(ApplicationPathService);
   private readonly http = inject(HttpClient);
 
   /**
    * Get general configuration
    */
   getGeneralConfig(): Observable<GeneralConfig> {
-    return this.http.get<GeneralConfig>(this.basePathService.buildApiUrl('/configuration/general')).pipe(
+    return this.http.get<GeneralConfig>(this.ApplicationPathService.buildApiUrl('/configuration/general')).pipe(
       catchError((error) => {
         console.error("Error fetching general config:", error);
         return throwError(() => new Error("Failed to load general configuration"));
@@ -34,7 +37,7 @@ export class ConfigurationService {
    * Update general configuration
    */
   updateGeneralConfig(config: GeneralConfig): Observable<any> {
-    return this.http.put<any>(this.basePathService.buildApiUrl('/configuration/general'), config).pipe(
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/general'), config).pipe(
       catchError((error) => {
         console.error("Error updating general config:", error);
         return throwError(() => new Error(error.error?.error || "Failed to update general configuration"));
@@ -46,7 +49,7 @@ export class ConfigurationService {
    * Get queue cleaner configuration
    */
   getQueueCleanerConfig(): Observable<QueueCleanerConfig> {
-    return this.http.get<QueueCleanerConfig>(this.basePathService.buildApiUrl('/configuration/queue_cleaner')).pipe(
+    return this.http.get<QueueCleanerConfig>(this.ApplicationPathService.buildApiUrl('/configuration/queue_cleaner')).pipe(
       map((response) => {
         response.jobSchedule = this.tryExtractJobScheduleFromCron(response.cronExpression);
         return response;
@@ -62,11 +65,15 @@ export class ConfigurationService {
    * Update queue cleaner configuration
    */
   updateQueueCleanerConfig(config: QueueCleanerConfig): Observable<QueueCleanerConfig> {
-    config.cronExpression = this.convertJobScheduleToCron(config.jobSchedule!);
-    return this.http.put<QueueCleanerConfig>(this.basePathService.buildApiUrl('/configuration/queue_cleaner'), config).pipe(
+    // Generate cron expression if using basic scheduling
+    if (!config.useAdvancedScheduling && config.jobSchedule) {
+      config.cronExpression = this.convertJobScheduleToCron(config.jobSchedule);
+    }
+    return this.http.put<QueueCleanerConfig>(this.ApplicationPathService.buildApiUrl('/configuration/queue_cleaner'), config).pipe(
       catchError((error) => {
         console.error("Error updating queue cleaner config:", error);
-        return throwError(() => new Error(error.error?.error || "Failed to update queue cleaner configuration"));
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }
@@ -75,7 +82,7 @@ export class ConfigurationService {
    * Get content blocker configuration
    */
   getContentBlockerConfig(): Observable<ContentBlockerConfig> {
-    return this.http.get<ContentBlockerConfig>(this.basePathService.buildApiUrl('/configuration/content_blocker')).pipe(
+    return this.http.get<ContentBlockerConfig>(this.ApplicationPathService.buildApiUrl('/configuration/content_blocker')).pipe(
       map((response) => {
         response.jobSchedule = this.tryExtractContentBlockerJobScheduleFromCron(response.cronExpression);
         return response;
@@ -95,10 +102,11 @@ export class ConfigurationService {
     if (!config.useAdvancedScheduling && config.jobSchedule) {
       config.cronExpression = this.convertContentBlockerJobScheduleToCron(config.jobSchedule);
     }
-    return this.http.put<void>(this.basePathService.buildApiUrl('/configuration/content_blocker'), config).pipe(
+    return this.http.put<void>(this.ApplicationPathService.buildApiUrl('/configuration/content_blocker'), config).pipe(
       catchError((error) => {
         console.error("Error updating content blocker config:", error);
-        return throwError(() => new Error(error.error?.error || "Failed to update content blocker configuration"));
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }
@@ -109,32 +117,32 @@ export class ConfigurationService {
    */
   private tryExtractJobScheduleFromCron(cronExpression: string): JobSchedule | undefined {
     // Patterns we support:
-    // Seconds: */n * * ? * * *
-    // Minutes: 0 */n * ? * * *
-    // Hours: 0 0 */n ? * * *
+    // Seconds: */n * * ? * * * or 0/n * * ? * * * (Quartz.NET format)
+    // Minutes: 0 */n * ? * * * or 0 0/n * ? * * * (Quartz.NET format)
+    // Hours: 0 0 */n ? * * * or 0 0 0/n ? * * * (Quartz.NET format)
     try {
       const parts = cronExpression.split(" ");
 
       if (parts.length !== 7) return undefined;
 
-      // Every n seconds
-      if (parts[0].startsWith("*/") && parts[1] === "*") {
+      // Every n seconds - handle both */n and 0/n formats
+      if ((parts[0].startsWith("*/") || parts[0].startsWith("0/")) && parts[1] === "*") {
         const seconds = parseInt(parts[0].substring(2));
         if (!isNaN(seconds) && seconds > 0 && seconds < 60) {
           return { every: seconds, type: ScheduleUnit.Seconds };
         }
       }
 
-      // Every n minutes
-      if (parts[0] === "0" && parts[1].startsWith("*/")) {
+      // Every n minutes - handle both */n and 0/n formats
+      if (parts[0] === "0" && (parts[1].startsWith("*/") || parts[1].startsWith("0/"))) {
         const minutes = parseInt(parts[1].substring(2));
         if (!isNaN(minutes) && minutes > 0 && minutes < 60) {
           return { every: minutes, type: ScheduleUnit.Minutes };
         }
       }
 
-      // Every n hours
-      if (parts[0] === "0" && parts[1] === "0" && parts[2].startsWith("*/")) {
+      // Every n hours - handle both */n and 0/n formats
+      if (parts[0] === "0" && parts[1] === "0" && (parts[2].startsWith("*/") || parts[2].startsWith("0/"))) {
         const hours = parseInt(parts[2].substring(2));
         if (!isNaN(hours) && hours > 0 && hours < 24) {
           return { every: hours, type: ScheduleUnit.Hours };
@@ -152,31 +160,31 @@ export class ConfigurationService {
    */
   private convertJobScheduleToCron(schedule: JobSchedule): string {
     if (!schedule || schedule.every <= 0) {
-      return "0 0/5 * * * ?"; // Default: every 5 minutes
+      return "0 0/5 * * * ?"; // Default: every 5 minutes (Quartz.NET format)
     }
 
     switch (schedule.type) {
       case ScheduleUnit.Seconds:
         if (schedule.every < 60) {
-          return `*/${schedule.every} * * ? * * *`;
+          return `0/${schedule.every} * * ? * * *`; // Quartz.NET format
         }
         break;
 
       case ScheduleUnit.Minutes:
         if (schedule.every < 60) {
-          return `0 */${schedule.every} * ? * * *`;
+          return `0 0/${schedule.every} * ? * * *`; // Quartz.NET format
         }
         break;
 
       case ScheduleUnit.Hours:
         if (schedule.every < 24) {
-          return `0 0 */${schedule.every} ? * * *`;
+          return `0 0 0/${schedule.every} ? * * *`; // Quartz.NET format
         }
         break;
     }
 
     // Fallback to default
-    return "0 0/5 * * * ?";
+    return "0 0/5 * * * ?"; // Default: every 5 minutes (Quartz.NET format)
   }
 
   /**
@@ -185,32 +193,32 @@ export class ConfigurationService {
    */
   private tryExtractContentBlockerJobScheduleFromCron(cronExpression: string): ContentBlockerJobSchedule | undefined {
     // Patterns we support:
-    // Seconds: */n * * ? * * *
-    // Minutes: 0 */n * ? * * *
-    // Hours: 0 0 */n ? * * *
+    // Seconds: */n * * ? * * * or 0/n * * ? * * * (Quartz.NET format)
+    // Minutes: 0 */n * ? * * * or 0 0/n * ? * * * (Quartz.NET format)
+    // Hours: 0 0 */n ? * * * or 0 0 0/n ? * * * (Quartz.NET format)
     try {
       const parts = cronExpression.split(" ");
 
       if (parts.length !== 7) return undefined;
 
-      // Every n seconds
-      if (parts[0].startsWith("*/") && parts[1] === "*") {
+      // Every n seconds - handle both */n and 0/n formats
+      if ((parts[0].startsWith("*/") || parts[0].startsWith("0/")) && parts[1] === "*") {
         const seconds = parseInt(parts[0].substring(2));
         if (!isNaN(seconds) && seconds > 0 && seconds < 60) {
           return { every: seconds, type: ContentBlockerScheduleUnit.Seconds };
         }
       }
 
-      // Every n minutes
-      if (parts[0] === "0" && parts[1].startsWith("*/")) {
+      // Every n minutes - handle both */n and 0/n formats
+      if (parts[0] === "0" && (parts[1].startsWith("*/") || parts[1].startsWith("0/"))) {
         const minutes = parseInt(parts[1].substring(2));
         if (!isNaN(minutes) && minutes > 0 && minutes < 60) {
           return { every: minutes, type: ContentBlockerScheduleUnit.Minutes };
         }
       }
 
-      // Every n hours
-      if (parts[0] === "0" && parts[1] === "0" && parts[2].startsWith("*/")) {
+      // Every n hours - handle both */n and 0/n formats
+      if (parts[0] === "0" && parts[1] === "0" && (parts[2].startsWith("*/") || parts[2].startsWith("0/"))) {
         const hours = parseInt(parts[2].substring(2));
         if (!isNaN(hours) && hours > 0 && hours < 24) {
           return { every: hours, type: ContentBlockerScheduleUnit.Hours };
@@ -228,38 +236,38 @@ export class ConfigurationService {
    */
   private convertContentBlockerJobScheduleToCron(schedule: ContentBlockerJobSchedule): string {
     if (!schedule || schedule.every <= 0) {
-      return "0 0/5 * * * ?"; // Default: every 5 minutes
+      return "0/5 * * * * ?"; // Default: every 5 seconds (Quartz.NET format)
     }
 
     switch (schedule.type) {
       case ContentBlockerScheduleUnit.Seconds:
         if (schedule.every < 60) {
-          return `*/${schedule.every} * * ? * * *`;
+          return `0/${schedule.every} * * ? * * *`; // Quartz.NET format
         }
         break;
 
       case ContentBlockerScheduleUnit.Minutes:
         if (schedule.every < 60) {
-          return `0 */${schedule.every} * ? * * *`;
+          return `0 0/${schedule.every} * ? * * *`; // Quartz.NET format
         }
         break;
 
       case ContentBlockerScheduleUnit.Hours:
         if (schedule.every < 24) {
-          return `0 0 */${schedule.every} ? * * *`;
+          return `0 0 0/${schedule.every} ? * * *`; // Quartz.NET format
         }
         break;
     }
 
     // Fallback to default
-    return "0 0/5 * * * ?";
+    return "0/5 * * * * ?"; // Default: every 5 seconds (Quartz.NET format)
   }
 
   /**
    * Get Sonarr configuration
    */
   getSonarrConfig(): Observable<SonarrConfig> {
-    return this.http.get<SonarrConfig>(this.basePathService.buildApiUrl('/configuration/sonarr')).pipe(
+    return this.http.get<SonarrConfig>(this.ApplicationPathService.buildApiUrl('/configuration/sonarr')).pipe(
       catchError((error) => {
         console.error("Error fetching Sonarr config:", error);
         return throwError(() => new Error("Failed to load Sonarr configuration"));
@@ -270,7 +278,7 @@ export class ConfigurationService {
    * Update Sonarr configuration (global settings only)
    */
   updateSonarrConfig(config: {failedImportMaxStrikes: number}): Observable<any> {
-    return this.http.put<any>(this.basePathService.buildApiUrl('/configuration/sonarr'), config).pipe(
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/sonarr'), config).pipe(
       catchError((error) => {
         console.error("Error updating Sonarr config:", error);
         return throwError(() => new Error(error.error?.error || "Failed to update Sonarr configuration"));
@@ -282,7 +290,7 @@ export class ConfigurationService {
    * Get Radarr configuration
    */
   getRadarrConfig(): Observable<RadarrConfig> {
-    return this.http.get<RadarrConfig>(this.basePathService.buildApiUrl('/configuration/radarr')).pipe(
+    return this.http.get<RadarrConfig>(this.ApplicationPathService.buildApiUrl('/configuration/radarr')).pipe(
       catchError((error) => {
         console.error("Error fetching Radarr config:", error);
         return throwError(() => new Error("Failed to load Radarr configuration"));
@@ -293,7 +301,7 @@ export class ConfigurationService {
    * Update Radarr configuration
    */
   updateRadarrConfig(config: {failedImportMaxStrikes: number}): Observable<any> {
-    return this.http.put<any>(this.basePathService.buildApiUrl('/configuration/radarr'), config).pipe(
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/radarr'), config).pipe(
       catchError((error) => {
         console.error("Error updating Radarr config:", error);
         return throwError(() => new Error(error.error?.error || "Failed to update Radarr configuration"));
@@ -305,7 +313,7 @@ export class ConfigurationService {
    * Get Lidarr configuration
    */
   getLidarrConfig(): Observable<LidarrConfig> {
-    return this.http.get<LidarrConfig>(this.basePathService.buildApiUrl('/configuration/lidarr')).pipe(
+    return this.http.get<LidarrConfig>(this.ApplicationPathService.buildApiUrl('/configuration/lidarr')).pipe(
       catchError((error) => {
         console.error("Error fetching Lidarr config:", error);
         return throwError(() => new Error("Failed to load Lidarr configuration"));
@@ -316,7 +324,7 @@ export class ConfigurationService {
    * Update Lidarr configuration
    */
   updateLidarrConfig(config: {failedImportMaxStrikes: number}): Observable<any> {
-    return this.http.put<any>(this.basePathService.buildApiUrl('/configuration/lidarr'), config).pipe(
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/lidarr'), config).pipe(
       catchError((error) => {
         console.error("Error updating Lidarr config:", error);
         return throwError(() => new Error(error.error?.error || "Failed to update Lidarr configuration"));
@@ -325,10 +333,56 @@ export class ConfigurationService {
   }
 
   /**
+   * Get Readarr configuration
+   */
+  getReadarrConfig(): Observable<ReadarrConfig> {
+    return this.http.get<ReadarrConfig>(this.ApplicationPathService.buildApiUrl('/configuration/readarr')).pipe(
+      catchError((error) => {
+        console.error("Error fetching Readarr config:", error);
+        return throwError(() => new Error("Failed to load Readarr configuration"));
+      })
+    );
+  }
+  /**
+   * Update Readarr configuration
+   */
+  updateReadarrConfig(config: {failedImportMaxStrikes: number}): Observable<any> {
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/readarr'), config).pipe(
+      catchError((error) => {
+        console.error("Error updating Readarr config:", error);
+        return throwError(() => new Error(error.error?.error || "Failed to update Readarr configuration"));
+      })
+    );
+  }
+
+  /**
+   * Get Whisparr configuration
+   */
+  getWhisparrConfig(): Observable<WhisparrConfig> {
+    return this.http.get<WhisparrConfig>(this.ApplicationPathService.buildApiUrl('/configuration/whisparr')).pipe(
+      catchError((error) => {
+        console.error("Error fetching Whisparr config:", error);
+        return throwError(() => new Error("Failed to load Whisparr configuration"));
+      })
+    );
+  }
+  /**
+   * Update Whisparr configuration
+   */
+  updateWhisparrConfig(config: {failedImportMaxStrikes: number}): Observable<any> {
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/whisparr'), config).pipe(
+      catchError((error) => {
+        console.error("Error updating Whisparr config:", error);
+        return throwError(() => new Error(error.error?.error || "Failed to update Whisparr configuration"));
+      })
+    );
+  }
+
+  /**
    * Get Download Client configuration
    */
   getDownloadClientConfig(): Observable<DownloadClientConfig> {
-    return this.http.get<DownloadClientConfig>(this.basePathService.buildApiUrl('/configuration/download_client')).pipe(
+    return this.http.get<DownloadClientConfig>(this.ApplicationPathService.buildApiUrl('/configuration/download_client')).pipe(
       catchError((error) => {
         console.error("Error fetching Download Client config:", error);
         return throwError(() => new Error("Failed to load Download Client configuration"));
@@ -340,7 +394,7 @@ export class ConfigurationService {
    * Update Download Client configuration
    */
   updateDownloadClientConfig(config: DownloadClientConfig): Observable<DownloadClientConfig> {
-    return this.http.put<DownloadClientConfig>(this.basePathService.buildApiUrl('/configuration/download_client'), config).pipe(
+    return this.http.put<DownloadClientConfig>(this.ApplicationPathService.buildApiUrl('/configuration/download_client'), config).pipe(
       catchError((error) => {
         console.error("Error updating Download Client config:", error);
         return throwError(() => new Error(error.error?.error || "Failed to update Download Client configuration"));
@@ -352,7 +406,7 @@ export class ConfigurationService {
    * Create a new Download Client
    */
   createDownloadClient(client: CreateDownloadClientDto): Observable<ClientConfig> {
-    return this.http.post<ClientConfig>(this.basePathService.buildApiUrl('/configuration/download_client'), client).pipe(
+    return this.http.post<ClientConfig>(this.ApplicationPathService.buildApiUrl('/configuration/download_client'), client).pipe(
       catchError((error) => {
         console.error("Error creating Download Client:", error);
         return throwError(() => new Error(error.error?.error || "Failed to create Download Client"));
@@ -364,7 +418,7 @@ export class ConfigurationService {
    * Update a specific Download Client by ID
    */
   updateDownloadClient(id: string, client: ClientConfig): Observable<ClientConfig> {
-    return this.http.put<ClientConfig>(this.basePathService.buildApiUrl(`/configuration/download_client/${id}`), client).pipe(
+    return this.http.put<ClientConfig>(this.ApplicationPathService.buildApiUrl(`/configuration/download_client/${id}`), client).pipe(
       catchError((error) => {
         console.error(`Error updating Download Client with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to update Download Client with ID ${id}`));
@@ -376,7 +430,7 @@ export class ConfigurationService {
    * Delete a Download Client by ID
    */
   deleteDownloadClient(id: string): Observable<void> {
-    return this.http.delete<void>(this.basePathService.buildApiUrl(`/configuration/download_client/${id}`)).pipe(
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/download_client/${id}`)).pipe(
       catchError((error) => {
         console.error(`Error deleting Download Client with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to delete Download Client with ID ${id}`));
@@ -390,7 +444,7 @@ export class ConfigurationService {
    * Create a new Sonarr instance
    */
   createSonarrInstance(instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.post<ArrInstance>(this.basePathService.buildApiUrl('/configuration/sonarr/instances'), instance).pipe(
+    return this.http.post<ArrInstance>(this.ApplicationPathService.buildApiUrl('/configuration/sonarr/instances'), instance).pipe(
       catchError((error) => {
         console.error("Error creating Sonarr instance:", error);
         return throwError(() => new Error(error.error?.error || "Failed to create Sonarr instance"));
@@ -402,7 +456,7 @@ export class ConfigurationService {
    * Update a Sonarr instance by ID
    */
   updateSonarrInstance(id: string, instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.put<ArrInstance>(this.basePathService.buildApiUrl(`/configuration/sonarr/instances/${id}`), instance).pipe(
+    return this.http.put<ArrInstance>(this.ApplicationPathService.buildApiUrl(`/configuration/sonarr/instances/${id}`), instance).pipe(
       catchError((error) => {
         console.error(`Error updating Sonarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to update Sonarr instance with ID ${id}`));
@@ -414,7 +468,7 @@ export class ConfigurationService {
    * Delete a Sonarr instance by ID
    */
   deleteSonarrInstance(id: string): Observable<void> {
-    return this.http.delete<void>(this.basePathService.buildApiUrl(`/configuration/sonarr/instances/${id}`)).pipe(
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/sonarr/instances/${id}`)).pipe(
       catchError((error) => {
         console.error(`Error deleting Sonarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to delete Sonarr instance with ID ${id}`));
@@ -428,7 +482,7 @@ export class ConfigurationService {
    * Create a new Radarr instance
    */
   createRadarrInstance(instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.post<ArrInstance>(this.basePathService.buildApiUrl('/configuration/radarr/instances'), instance).pipe(
+    return this.http.post<ArrInstance>(this.ApplicationPathService.buildApiUrl('/configuration/radarr/instances'), instance).pipe(
       catchError((error) => {
         console.error("Error creating Radarr instance:", error);
         return throwError(() => new Error(error.error?.error || "Failed to create Radarr instance"));
@@ -440,7 +494,7 @@ export class ConfigurationService {
    * Update a Radarr instance by ID
    */
   updateRadarrInstance(id: string, instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.put<ArrInstance>(this.basePathService.buildApiUrl(`/configuration/radarr/instances/${id}`), instance).pipe(
+    return this.http.put<ArrInstance>(this.ApplicationPathService.buildApiUrl(`/configuration/radarr/instances/${id}`), instance).pipe(
       catchError((error) => {
         console.error(`Error updating Radarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to update Radarr instance with ID ${id}`));
@@ -452,7 +506,7 @@ export class ConfigurationService {
    * Delete a Radarr instance by ID
    */
   deleteRadarrInstance(id: string): Observable<void> {
-    return this.http.delete<void>(this.basePathService.buildApiUrl(`/configuration/radarr/instances/${id}`)).pipe(
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/radarr/instances/${id}`)).pipe(
       catchError((error) => {
         console.error(`Error deleting Radarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to delete Radarr instance with ID ${id}`));
@@ -466,7 +520,7 @@ export class ConfigurationService {
    * Create a new Lidarr instance
    */
   createLidarrInstance(instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.post<ArrInstance>(this.basePathService.buildApiUrl('/configuration/lidarr/instances'), instance).pipe(
+    return this.http.post<ArrInstance>(this.ApplicationPathService.buildApiUrl('/configuration/lidarr/instances'), instance).pipe(
       catchError((error) => {
         console.error("Error creating Lidarr instance:", error);
         return throwError(() => new Error(error.error?.error || "Failed to create Lidarr instance"));
@@ -478,7 +532,7 @@ export class ConfigurationService {
    * Update a Lidarr instance by ID
    */
   updateLidarrInstance(id: string, instance: CreateArrInstanceDto): Observable<ArrInstance> {
-    return this.http.put<ArrInstance>(this.basePathService.buildApiUrl(`/configuration/lidarr/instances/${id}`), instance).pipe(
+    return this.http.put<ArrInstance>(this.ApplicationPathService.buildApiUrl(`/configuration/lidarr/instances/${id}`), instance).pipe(
       catchError((error) => {
         console.error(`Error updating Lidarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to update Lidarr instance with ID ${id}`));
@@ -490,10 +544,86 @@ export class ConfigurationService {
    * Delete a Lidarr instance by ID
    */
   deleteLidarrInstance(id: string): Observable<void> {
-    return this.http.delete<void>(this.basePathService.buildApiUrl(`/configuration/lidarr/instances/${id}`)).pipe(
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/lidarr/instances/${id}`)).pipe(
       catchError((error) => {
         console.error(`Error deleting Lidarr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to delete Lidarr instance with ID ${id}`));
+      })
+    );
+  }
+
+  // ===== READARR INSTANCE MANAGEMENT =====
+
+  /**
+   * Create a new Readarr instance
+   */
+  createReadarrInstance(instance: CreateArrInstanceDto): Observable<ArrInstance> {
+    return this.http.post<ArrInstance>(this.ApplicationPathService.buildApiUrl('/configuration/readarr/instances'), instance).pipe(
+      catchError((error) => {
+        console.error("Error creating Readarr instance:", error);
+        return throwError(() => new Error(error.error?.error || "Failed to create Readarr instance"));
+      })
+    );
+  }
+
+  /**
+   * Update a Readarr instance by ID
+   */
+  updateReadarrInstance(id: string, instance: CreateArrInstanceDto): Observable<ArrInstance> {
+    return this.http.put<ArrInstance>(this.ApplicationPathService.buildApiUrl(`/configuration/readarr/instances/${id}`), instance).pipe(
+      catchError((error) => {
+        console.error(`Error updating Readarr instance with ID ${id}:`, error);
+        return throwError(() => new Error(error.error?.error || `Failed to update Readarr instance with ID ${id}`));
+      })
+    );
+  }
+
+  /**
+   * Delete a Readarr instance by ID
+   */
+  deleteReadarrInstance(id: string): Observable<void> {
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/readarr/instances/${id}`)).pipe(
+      catchError((error) => {
+        console.error(`Error deleting Readarr instance with ID ${id}:`, error);
+        return throwError(() => new Error(error.error?.error || `Failed to delete Readarr instance with ID ${id}`));
+      })
+    );
+  }
+
+  // ===== WHISPARR INSTANCE MANAGEMENT =====
+
+  /**
+   * Create a new Whisparr instance
+   */
+  createWhisparrInstance(instance: CreateArrInstanceDto): Observable<ArrInstance> {
+    return this.http.post<ArrInstance>(this.ApplicationPathService.buildApiUrl('/configuration/whisparr/instances'), instance).pipe(
+      catchError((error) => {
+        console.error("Error creating Whisparr instance:", error);
+        return throwError(() => new Error(error.error?.error || "Failed to create Whisparr instance"));
+      })
+    );
+  }
+
+  /**
+   * Update a Whisparr instance by ID
+   */
+  updateWhisparrInstance(id: string, instance: CreateArrInstanceDto): Observable<ArrInstance> {
+    return this.http.put<ArrInstance>(this.ApplicationPathService.buildApiUrl(`/configuration/whisparr/instances/${id}`), instance).pipe(
+      catchError((error) => {
+        console.error(`Error updating Whisparr instance with ID ${id}:`, error);
+        return throwError(() => new Error(error.error?.error || `Failed to update Whisparr instance with ID ${id}`));
+      })
+    );
+  }
+
+  /**
+   * Delete a Whisparr instance by ID
+   */
+  deleteWhisparrInstance(id: string): Observable<void> {
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/configuration/whisparr/instances/${id}`)).pipe(
+      catchError((error) => {
+        console.error(`Error deleting Whisparr instance with ID ${id}:`, error);
+        return throwError(() => new Error(error.error?.error || `Failed to delete Whisparr instance with ID ${id}`));
       })
     );
   }

@@ -29,7 +29,7 @@ EXPOSE 11011
 COPY backend/ ./backend/
 
 # Restore dependencies
-RUN dotnet nuget add source --username ${PACKAGES_USERNAME} --password ${PACKAGES_PAT} --store-password-in-clear-text --name Cleanuparr https://nuget.pkg.github.com/flmorg/index.json
+RUN dotnet nuget add source --username ${PACKAGES_USERNAME} --password ${PACKAGES_PAT} --store-password-in-clear-text --name Cleanuparr https://nuget.pkg.github.com/Cleanuparr/index.json
 
 # Build and publish
 RUN dotnet publish ./backend/Cleanuparr.Api/Cleanuparr.Api.csproj \
@@ -45,6 +45,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0-bookworm-slim
 
 # Install required packages for user management and timezone support
 RUN apt-get update && apt-get install -y \
+    curl \
     tzdata \
     gosu \
     && rm -rf /var/lib/apt/lists/*

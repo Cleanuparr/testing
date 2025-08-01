@@ -26,6 +26,8 @@ import { NotificationService } from "../../core/services/notification.service";
 import { SelectModule } from "primeng/select";
 import { DropdownModule } from "primeng/dropdown";
 import { LoadingErrorStateComponent } from "../../shared/components/loading-error-state/loading-error-state.component";
+import { ErrorHandlerUtil } from "../../core/utils/error-handler.util";
+import { DocumentationService } from "../../core/services/documentation.service";
 
 @Component({
   selector: "app-content-blocker-settings",
@@ -87,12 +89,14 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
   // Using the notification service for all toast messages
   private notificationService = inject(NotificationService);
   private contentBlockerStore = inject(ContentBlockerConfigStore);
+  private documentationService = inject(DocumentationService);
 
   // Signals from the store
   readonly contentBlockerConfig = this.contentBlockerStore.config;
   readonly contentBlockerLoading = this.contentBlockerStore.loading;
   readonly contentBlockerSaving = this.contentBlockerStore.saving;
-  readonly contentBlockerError = this.contentBlockerStore.error;
+  readonly contentBlockerLoadError = this.contentBlockerStore.loadError;  // Only for "Not connected" state
+  readonly contentBlockerSaveError = this.contentBlockerStore.saveError;  // Only for toast notifications
 
   // Track active accordion tabs
   activeAccordionIndices: number[] = [];
@@ -107,6 +111,14 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
     return !this.contentBlockerForm.dirty;
   }
 
+  /**
+   * Opens field-specific documentation
+   * @param fieldName Field name to open documentation for
+   */
+  openFieldDocs(fieldName: string): void {
+    this.documentationService.openFieldDocumentation('content-blocker', fieldName);
+  }
+
   constructor() {
     // Initialize the content blocker form with proper disabled states
     this.contentBlockerForm = this.formBuilder.group({
@@ -115,7 +127,7 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       cronExpression: [{ value: '', disabled: true }, [Validators.required]],
       jobSchedule: this.formBuilder.group({
         every: [{ value: 5, disabled: true }, [Validators.required, Validators.min(1)]],
-        type: [{ value: ScheduleUnit.Minutes, disabled: true }],
+        type: [{ value: ScheduleUnit.Seconds, disabled: true }],
       }),
 
       ignorePrivate: [{ value: false, disabled: true }],
@@ -137,6 +149,16 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
         blocklistPath: [{ value: "", disabled: true }],
         blocklistType: [{ value: BlocklistType.Blacklist, disabled: true }],
       }),
+      readarr: this.formBuilder.group({
+        enabled: [{ value: false, disabled: true }],
+        blocklistPath: [{ value: "", disabled: true }],
+        blocklistType: [{ value: BlocklistType.Blacklist, disabled: true }],
+      }),
+      whisparr: this.formBuilder.group({
+        enabled: [{ value: false, disabled: true }],
+        blocklistPath: [{ value: "", disabled: true }],
+        blocklistType: [{ value: BlocklistType.Blacklist, disabled: true }],
+      }),
     });
 
     // Create an effect to update the form when the configuration changes
@@ -150,13 +172,15 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
           cronExpression: config.cronExpression,
           jobSchedule: config.jobSchedule || {
             every: 5,
-            type: ScheduleUnit.Minutes
+            type: ScheduleUnit.Seconds
           },
           ignorePrivate: config.ignorePrivate,
           deletePrivate: config.deletePrivate,
           sonarr: config.sonarr,
           radarr: config.radarr,
           lidarr: config.lidarr,
+          readarr: config.readarr,
+          whisparr: config.whisparr,
         });
 
         // Update all form control states
@@ -170,13 +194,30 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       }
     });
     
-    // Effect to handle errors - only emit to parent but don't show toast
-    // (will be displayed by the LoadingErrorStateComponent)
+    // Effect to handle load errors - emit to LoadingErrorStateComponent for "Not connected" display
     effect(() => {
-      const errorMessage = this.contentBlockerError();
-      if (errorMessage) {
-        // Only emit the error for parent components
-        this.error.emit(errorMessage);
+      const loadErrorMessage = this.contentBlockerLoadError();
+      if (loadErrorMessage) {
+        // Load errors should be shown as "Not connected to server" in LoadingErrorStateComponent
+        this.error.emit(loadErrorMessage);
+      }
+    });
+    
+    // Effect to handle save errors - show as toast notifications for user to fix
+    effect(() => {
+      const saveErrorMessage = this.contentBlockerSaveError();
+      if (saveErrorMessage) {
+        // Check if this looks like a validation error from the backend
+        // These are typically user-fixable errors that should be shown as toasts
+        const isUserFixableError = ErrorHandlerUtil.isUserFixableError(saveErrorMessage);
+        
+        if (isUserFixableError) {
+          // Show validation errors as toast notifications so user can fix them
+          this.notificationService.showError(saveErrorMessage);
+        } else {
+          // For non-user-fixable save errors, also emit to parent
+          this.error.emit(saveErrorMessage);
+        }
       }
     });
     
@@ -249,7 +290,7 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
     }
       
     // Listen for changes to blocklist enabled states
-    ['sonarr', 'radarr', 'lidarr'].forEach(arrType => {
+    ['sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr'].forEach(arrType => {
       const enabledControl = this.contentBlockerForm.get(`${arrType}.enabled`);
       
       if (enabledControl) {
@@ -319,6 +360,8 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       this.updateBlocklistDependentControls('sonarr', config.sonarr?.enabled || false);
       this.updateBlocklistDependentControls('radarr', config.radarr?.enabled || false);
       this.updateBlocklistDependentControls('lidarr', config.lidarr?.enabled || false);
+      this.updateBlocklistDependentControls('readarr', config.readarr?.enabled || false);
+      this.updateBlocklistDependentControls('whisparr', config.whisparr?.enabled || false);
     }
   }
 
@@ -378,15 +421,21 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       this.contentBlockerForm.get("sonarr.enabled")?.enable({ onlySelf: true });
       this.contentBlockerForm.get("radarr.enabled")?.enable({ onlySelf: true });
       this.contentBlockerForm.get("lidarr.enabled")?.enable({ onlySelf: true });
+      this.contentBlockerForm.get("readarr.enabled")?.enable({ onlySelf: true });
+      this.contentBlockerForm.get("whisparr.enabled")?.enable({ onlySelf: true });
       
       // Update dependent controls based on current enabled states
       const sonarrEnabled = this.contentBlockerForm.get("sonarr.enabled")?.value || false;
       const radarrEnabled = this.contentBlockerForm.get("radarr.enabled")?.value || false;
       const lidarrEnabled = this.contentBlockerForm.get("lidarr.enabled")?.value || false;
+      const readarrEnabled = this.contentBlockerForm.get("readarr.enabled")?.value || false;
+      const whisparrEnabled = this.contentBlockerForm.get("whisparr.enabled")?.value || false;
       
       this.updateBlocklistDependentControls('sonarr', sonarrEnabled);
       this.updateBlocklistDependentControls('radarr', radarrEnabled);
       this.updateBlocklistDependentControls('lidarr', lidarrEnabled);
+      this.updateBlocklistDependentControls('readarr', readarrEnabled);
+      this.updateBlocklistDependentControls('whisparr', whisparrEnabled);
     } else {
       // Disable all scheduling controls
       cronExpressionControl?.disable();
@@ -411,6 +460,12 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       this.contentBlockerForm.get("lidarr.enabled")?.disable({ onlySelf: true });
       this.contentBlockerForm.get("lidarr.blocklistPath")?.disable({ onlySelf: true });
       this.contentBlockerForm.get("lidarr.blocklistType")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("readarr.enabled")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("readarr.blocklistPath")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("readarr.blocklistType")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("whisparr.enabled")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("whisparr.blocklistPath")?.disable({ onlySelf: true });
+      this.contentBlockerForm.get("whisparr.blocklistType")?.disable({ onlySelf: true });
 
       // Save current active accordion state before clearing it
       this.activeAccordionIndices = [];
@@ -454,6 +509,16 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
           blocklistPath: "",
           blocklistType: BlocklistType.Blacklist,
         },
+        readarr: formValue.readarr || {
+          enabled: false,
+          blocklistPath: "",
+          blocklistType: BlocklistType.Blacklist,
+        },
+        whisparr: formValue.whisparr || {
+          enabled: false,
+          blocklistPath: "",
+          blocklistType: BlocklistType.Blacklist,
+        },
       };
       
       // Save the configuration
@@ -462,9 +527,9 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
       // Setup a one-time check to mark form as pristine after successful save
       const checkSaveCompletion = () => {
         const saving = this.contentBlockerSaving();
-        const error = this.contentBlockerError();
+        const saveError = this.contentBlockerSaveError();
         
-        if (!saving && !error) {
+        if (!saving && !saveError) {
           // Mark form as pristine after successful save
           this.contentBlockerForm.markAsPristine();
           // Update original values reference
@@ -473,9 +538,9 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
           this.saved.emit();
           // Display success message
           this.notificationService.showSuccess('Content blocker configuration saved successfully.');
-        } else if (!saving && error) {
-          // If there's an error, we can stop checking
-          // No need to show error toast here, it's handled by the LoadingErrorStateComponent
+        } else if (!saving && saveError) {
+          // If there's a save error, we can stop checking
+          // Toast notification is already handled by the effect above
         } else {
           // If still saving, check again in a moment
           setTimeout(checkSaveCompletion, 100);
@@ -522,6 +587,16 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
         blocklistPath: "",
         blocklistType: BlocklistType.Blacklist,
       },
+      readarr: {
+        enabled: false,
+        blocklistPath: "",
+        blocklistType: BlocklistType.Blacklist,
+      },
+      whisparr: {
+        enabled: false,
+        blocklistPath: "",
+        blocklistType: BlocklistType.Blacklist,
+      },
     });
 
     // Manually update control states after reset
@@ -529,6 +604,8 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
     this.updateBlocklistDependentControls('sonarr', false);
     this.updateBlocklistDependentControls('radarr', false);
     this.updateBlocklistDependentControls('lidarr', false);
+    this.updateBlocklistDependentControls('readarr', false);
+    this.updateBlocklistDependentControls('whisparr', false);
     
     // Mark form as dirty so the save button is enabled after reset
     this.contentBlockerForm.markAsDirty();
@@ -552,7 +629,7 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
    */
   hasError(controlName: string, errorName: string): boolean {
     const control = this.contentBlockerForm.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
   
   /**
@@ -567,7 +644,7 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
     } else if (scheduleType === ScheduleUnit.Hours) {
       return this.scheduleValueOptions[ScheduleUnit.Hours];
     }
-    return this.scheduleValueOptions[ScheduleUnit.Minutes]; // Default to minutes
+    return this.scheduleValueOptions[ScheduleUnit.Seconds]; // Default to seconds
   }
 
   /**
@@ -580,6 +657,8 @@ export class ContentBlockerSettingsComponent implements OnDestroy, CanComponentD
     }
 
     const control = parentControl.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
+  
+
 } 

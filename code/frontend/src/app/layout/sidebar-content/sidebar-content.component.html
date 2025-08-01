@@ -12,7 +12,7 @@
 <!-- Sidebar Navigation -->
 <nav class="nav-menu">
   <!-- Project Sponsors Link -->
-  <a href="https://github.com/sponsors/username" class="nav-item sponsor-link" target="_blank" rel="noopener noreferrer">
+  <a href="https://cleanuparr.github.io/Cleanuparr/support" class="nav-item sponsor-link" target="_blank" rel="noopener noreferrer">
     <div class="nav-icon-wrapper heart-icon">
       <i class="pi pi-heart"></i>
     </div>
@@ -46,6 +46,18 @@
         <i class="pi pi-bolt"></i>
       </div>
       <span>Lidarr</span>
+    </a>
+    <a [routerLink]="['/readarr']" class="nav-item" [class.active]="router.url.includes('/readarr')" (click)="onNavItemClick()">
+      <div class="nav-icon-wrapper">
+        <i class="pi pi-book"></i>
+      </div>
+      <span>Readarr</span>
+    </a>
+    <a [routerLink]="['/whisparr']" class="nav-item" [class.active]="router.url.includes('/whisparr')" (click)="onNavItemClick()">
+      <div class="nav-icon-wrapper">
+        <i class="pi pi-lock"></i>
+      </div>
+      <span>Whisparr</span>
     </a>
     <a [routerLink]="['/download-clients']" class="nav-item" [class.active]="router.url.includes('/download-clients')" (click)="onNavItemClick()">
       <div class="nav-icon-wrapper">

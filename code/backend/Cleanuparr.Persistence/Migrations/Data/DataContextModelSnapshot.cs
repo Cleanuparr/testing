@@ -143,6 +143,24 @@ namespace Cleanuparr.Persistence.Migrations.Data
                                 .HasColumnName("radarr_enabled");
                         });
 
+                    b.ComplexProperty<Dictionary<string, object>>("Readarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Readarr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("readarr_blocklist_path");
+
+                            b1.Property<string>("BlocklistType")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("readarr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("readarr_enabled");
+                        });
+
                     b.ComplexProperty<Dictionary<string, object>>("Sonarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Sonarr#BlocklistSettings", b1 =>
                         {
                             b1.IsRequired();
@@ -159,6 +177,23 @@ namespace Cleanuparr.Persistence.Migrations.Data
                             b1.Property<bool>("Enabled")
                                 .HasColumnType("INTEGER")
                                 .HasColumnName("sonarr_enabled");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Whisparr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Whisparr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("whisparr_blocklist_path");
+
+                            b1.Property<int>("BlocklistType")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("whisparr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("whisparr_enabled");
                         });
 
                     b.HasKey("Id")
@@ -369,6 +404,10 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
+                    b.Property<string>("FullUrl")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("full_url");
+
                     b.Property<string>("Key")
                         .HasColumnType("TEXT")
                         .HasColumnName("key");
@@ -397,9 +436,9 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("INTEGER")
                         .HasColumnName("on_stalled_strike");
 
-                    b.Property<string>("Url")
+                    b.Property<string>("Tags")
                         .HasColumnType("TEXT")
-                        .HasColumnName("url");
+                        .HasColumnName("tags");
 
                     b.HasKey("Id")
                         .HasName("pk_apprise_configs");

@@ -1,11 +1,13 @@
 using System.Text.Json.Serialization;
+using Cleanuparr.Domain.Entities.Arr;
+using Cleanuparr.Infrastructure.Features.DownloadHunter.Consumers;
 using Cleanuparr.Infrastructure.Features.DownloadRemover.Consumers;
 using Cleanuparr.Infrastructure.Features.Notifications.Consumers;
+using Cleanuparr.Infrastructure.Features.Notifications.Models;
 using Cleanuparr.Infrastructure.Health;
 using Cleanuparr.Infrastructure.Http;
 using Cleanuparr.Infrastructure.Http.DynamicHttpClientSystem;
 using Data.Models.Arr;
-using Infrastructure.Verticals.Notifications.Models;
 using MassTransit;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -26,7 +28,9 @@ public static class MainDI
             .AddMassTransit(config =>
             {
                 config.AddConsumer<DownloadRemoverConsumer<SearchItem>>();
-                config.AddConsumer<DownloadRemoverConsumer<SonarrSearchItem>>();
+                config.AddConsumer<DownloadRemoverConsumer<SeriesSearchItem>>();
+                config.AddConsumer<DownloadHunterConsumer<SearchItem>>();
+                config.AddConsumer<DownloadHunterConsumer<SeriesSearchItem>>();
                 
                 config.AddConsumer<NotificationConsumer<FailedImportStrikeNotification>>();
                 config.AddConsumer<NotificationConsumer<StalledStrikeNotification>>();
@@ -48,7 +52,15 @@ public static class MainDI
                     cfg.ReceiveEndpoint("download-remover-queue", e =>
                     {
                         e.ConfigureConsumer<DownloadRemoverConsumer<SearchItem>>(context);
-                        e.ConfigureConsumer<DownloadRemoverConsumer<SonarrSearchItem>>(context);
+                        e.ConfigureConsumer<DownloadRemoverConsumer<SeriesSearchItem>>(context);
+                        e.ConcurrentMessageLimit = 2;
+                        e.PrefetchCount = 2;
+                    });
+                    
+                    cfg.ReceiveEndpoint("download-hunter-queue", e =>
+                    {
+                        e.ConfigureConsumer<DownloadHunterConsumer<SearchItem>>(context);
+                        e.ConfigureConsumer<DownloadHunterConsumer<SeriesSearchItem>>(context);
                         e.ConcurrentMessageLimit = 1;
                         e.PrefetchCount = 1;
                     });
@@ -83,9 +95,17 @@ public static class MainDI
     /// </summary>
     private static IServiceCollection AddHealthServices(this IServiceCollection services) =>
         services
-            // Register the health check service
+            // Register the existing health check service for download clients
             .AddSingleton<IHealthCheckService, HealthCheckService>()
             
             // Register the background service for periodic health checks
-            .AddHostedService<HealthCheckBackgroundService>();
+            .AddHostedService<HealthCheckBackgroundService>()
+            
+            // Add ASP.NET Core health checks
+            .AddHealthChecks()
+                .AddCheck<ApplicationHealthCheck>("application", tags: ["liveness"])
+                .AddCheck<DatabaseHealthCheck>("database", tags: ["readiness"])
+                .AddCheck<FileSystemHealthCheck>("filesystem", tags: ["readiness"])
+                .AddCheck<DownloadClientsHealthCheck>("download_clients", tags: ["readiness"])
+            .Services;
 }

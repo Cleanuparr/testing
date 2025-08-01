@@ -1,6 +1,6 @@
-﻿using Cleanuparr.Infrastructure.Features.Arr.Interfaces;
+﻿using Cleanuparr.Domain.Entities.Arr.Queue;
+using Cleanuparr.Infrastructure.Features.Arr.Interfaces;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
-using Data.Models.Arr.Queue;
 using Microsoft.Extensions.Logging;
 
 namespace Cleanuparr.Infrastructure.Features.Arr;

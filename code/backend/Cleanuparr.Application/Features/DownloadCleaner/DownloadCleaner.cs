@@ -1,3 +1,4 @@
+using Cleanuparr.Domain.Entities.Arr.Queue;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Events;
 using Cleanuparr.Infrastructure.Features.Arr;
@@ -10,7 +11,6 @@ using Cleanuparr.Persistence;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
 using Cleanuparr.Persistence.Models.Configuration.DownloadCleaner;
 using Cleanuparr.Persistence.Models.Configuration.General;
-using Data.Models.Arr.Queue;
 using MassTransit;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -61,8 +61,8 @@ public sealed class DownloadCleaner : GenericHandler
         
         IReadOnlyList<string> ignoredDownloads = ContextProvider.Get<GeneralConfig>(nameof(GeneralConfig)).IgnoredDownloads;
         
-        // Process each client separately
-        var allDownloads = new List<object>();
+        var downloadServiceToDownloadsMap = new Dictionary<IDownloadService, List<object>>();
+        
         foreach (var downloadService in downloadServices)
         {
             try
@@ -71,24 +71,24 @@ public sealed class DownloadCleaner : GenericHandler
                 var clientDownloads = await downloadService.GetSeedingDownloads();
                 if (clientDownloads?.Count > 0)
                 {
-                    allDownloads.AddRange(clientDownloads);
+                    downloadServiceToDownloadsMap[downloadService] = clientDownloads;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get seeding downloads from download client");
+                _logger.LogError(ex, "Failed to get seeding downloads from download client {clientName}", downloadService.ClientConfig.Name);
             }
         }
 
-        if (allDownloads.Count == 0)
+        if (downloadServiceToDownloadsMap.Count == 0)
         {
             _logger.LogDebug("no seeding downloads found");
             return;
         }
         
-        _logger.LogTrace("found {count} seeding downloads", allDownloads.Count);
+        var totalDownloads = downloadServiceToDownloadsMap.Values.Sum(x => x.Count);
+        _logger.LogTrace("found {count} seeding downloads across {clientCount} clients", totalDownloads, downloadServiceToDownloadsMap.Count);
         
-        // List<object>? downloadsToChangeCategory = null;
         List<Tuple<IDownloadService, List<object>>> downloadServiceWithDownloads = [];
 
         if (isUnlinkedEnabled)
@@ -102,24 +102,23 @@ public sealed class DownloadCleaner : GenericHandler
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to create category for download client");
+                    _logger.LogError(ex, "Failed to create category for download client {clientName}", downloadService.ClientConfig.Name);
                 }
             }
             
-            // Get downloads to change category
-            foreach (var downloadService in downloadServices)
+            foreach (var (downloadService, clientDownloads) in downloadServiceToDownloadsMap)
             {
                 try
                 {
-                    var clientDownloads = downloadService.FilterDownloadsToChangeCategoryAsync(allDownloads, config.UnlinkedCategories);
-                    if (clientDownloads?.Count > 0)
+                    var downloadsToChangeCategory = downloadService.FilterDownloadsToChangeCategoryAsync(clientDownloads, config.UnlinkedCategories);
+                    if (downloadsToChangeCategory?.Count > 0)
                     {
-                        downloadServiceWithDownloads.Add(Tuple.Create(downloadService, clientDownloads));
+                        downloadServiceWithDownloads.Add(Tuple.Create(downloadService, downloadsToChangeCategory));
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to filter downloads for category change");
+                    _logger.LogError(ex, "Failed to filter downloads for category change for download client {clientName}", downloadService.ClientConfig.Name);
                 }
             }
         }
@@ -130,7 +129,9 @@ public sealed class DownloadCleaner : GenericHandler
         await ProcessArrConfigAsync(ContextProvider.Get<ArrConfig>(nameof(InstanceType.Sonarr)), InstanceType.Sonarr, true);
         await ProcessArrConfigAsync(ContextProvider.Get<ArrConfig>(nameof(InstanceType.Radarr)), InstanceType.Radarr, true);
         await ProcessArrConfigAsync(ContextProvider.Get<ArrConfig>(nameof(InstanceType.Lidarr)), InstanceType.Lidarr, true);
-
+        await ProcessArrConfigAsync(ContextProvider.Get<ArrConfig>(nameof(InstanceType.Readarr)), InstanceType.Readarr, true);
+        await ProcessArrConfigAsync(ContextProvider.Get<ArrConfig>(nameof(InstanceType.Whisparr)), InstanceType.Whisparr, true);
+        
         if (isUnlinkedEnabled && downloadServiceWithDownloads.Count > 0)
         {
             _logger.LogInformation("Found {count} potential downloads to change category", downloadServiceWithDownloads.Sum(x => x.Item2.Count));
@@ -156,16 +157,15 @@ public sealed class DownloadCleaner : GenericHandler
             return;
         }
         
-        // Get downloads to clean
         downloadServiceWithDownloads = [];
-        foreach (var downloadService in downloadServices)
+        foreach (var (downloadService, clientDownloads) in downloadServiceToDownloadsMap)
         {
             try
             {
-                var clientDownloads = downloadService.FilterDownloadsToBeCleanedAsync(allDownloads, config.Categories);
-                if (clientDownloads?.Count > 0)
+                var downloadsToClean = downloadService.FilterDownloadsToBeCleanedAsync(clientDownloads, config.Categories);
+                if (downloadsToClean?.Count > 0)
                 {
-                    downloadServiceWithDownloads.Add(Tuple.Create(downloadService, clientDownloads));
+                    downloadServiceWithDownloads.Add(Tuple.Create(downloadService, downloadsToClean));
                 }
             }
             catch (Exception ex)
@@ -174,9 +174,6 @@ public sealed class DownloadCleaner : GenericHandler
             }
         }
         
-        // release unused objects
-        allDownloads = null;
-
         _logger.LogInformation("found {count} potential downloads to clean", downloadServiceWithDownloads.Sum(x => x.Item2.Count));
         
         // Process cleaning for each client

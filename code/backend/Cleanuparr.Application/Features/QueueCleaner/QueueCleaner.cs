@@ -1,3 +1,4 @@
+using Cleanuparr.Domain.Entities.Arr.Queue;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Events;
 using Cleanuparr.Infrastructure.Features.Arr;
@@ -11,7 +12,6 @@ using Cleanuparr.Persistence.Models.Configuration;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
 using Cleanuparr.Persistence.Models.Configuration.General;
 using Cleanuparr.Persistence.Models.Configuration.QueueCleaner;
-using Data.Models.Arr.Queue;
 using MassTransit;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -42,10 +42,14 @@ public sealed class QueueCleaner : GenericHandler
         var sonarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Sonarr));
         var radarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Radarr));
         var lidarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Lidarr));
+        var readarrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Readarr));
+        var whisparrConfig = ContextProvider.Get<ArrConfig>(nameof(InstanceType.Whisparr));
         
         await ProcessArrConfigAsync(sonarrConfig, InstanceType.Sonarr);
         await ProcessArrConfigAsync(radarrConfig, InstanceType.Radarr);
         await ProcessArrConfigAsync(lidarrConfig, InstanceType.Lidarr);
+        await ProcessArrConfigAsync(readarrConfig, InstanceType.Readarr);
+        await ProcessArrConfigAsync(whisparrConfig, InstanceType.Whisparr);
     }
 
     protected override async Task ProcessInstanceAsync(ArrInstance instance, InstanceType instanceType)
@@ -103,7 +107,7 @@ public sealed class QueueCleaner : GenericHandler
 
                 DownloadCheckResult downloadCheckResult = new();
 
-                if (record.Protocol is "torrent")
+                if (record.Protocol.Contains("torrent", StringComparison.InvariantCultureIgnoreCase))
                 {
                     var torrentClients = downloadServices
                         .Where(x => x.ClientConfig.Type is DownloadClientType.Torrent)
@@ -137,12 +141,16 @@ public sealed class QueueCleaner : GenericHandler
                             _logger.LogWarning("Download not found in any torrent client | {title}", record.Title);
                         }
                     }
+                    else
+                    {
+                        _logger.LogDebug("No torrent clients enabled");
+                    }
                 }
                 
                 var config = ContextProvider.Get<QueueCleanerConfig>();
                 
                 // failed import check
-                bool shouldRemoveFromArr = await arrClient.ShouldRemoveFromQueue(instanceType, record, downloadCheckResult.IsPrivate, config.FailedImport.MaxStrikes);
+                bool shouldRemoveFromArr = await arrClient.ShouldRemoveFromQueue(instanceType, record, downloadCheckResult.IsPrivate, instance.ArrConfig.FailedImportMaxStrikes);
                 DeleteReason deleteReason = downloadCheckResult.ShouldRemove ? downloadCheckResult.DeleteReason : DeleteReason.FailedImport;
                 
                 if (!shouldRemoveFromArr && !downloadCheckResult.ShouldRemove)

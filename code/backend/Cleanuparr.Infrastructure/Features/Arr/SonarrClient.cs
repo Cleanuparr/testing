@@ -1,11 +1,12 @@
 ﻿using System.Text;
+using Cleanuparr.Domain.Entities.Arr;
+using Cleanuparr.Domain.Entities.Arr.Queue;
 using Cleanuparr.Domain.Entities.Sonarr;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Features.Arr.Interfaces;
 using Cleanuparr.Infrastructure.Features.ItemStriker;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
 using Data.Models.Arr;
-using Data.Models.Arr.Queue;
 using Infrastructure.Interceptors;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -57,7 +58,7 @@ public class SonarrClient : ArrClient, ISonarrClient
         UriBuilder uriBuilder = new(arrInstance.Url);
         uriBuilder.Path = $"{uriBuilder.Path.TrimEnd('/')}/api/v3/command";
         
-        foreach (SonarrCommand command in GetSearchCommands(items.Cast<SonarrSearchItem>().ToHashSet()))
+        foreach (SonarrCommand command in GetSearchCommands(items.Cast<SeriesSearchItem>().ToHashSet()))
         {
             using HttpRequestMessage request = new(HttpMethod.Post, uriBuilder.Uri);
             request.Content = new StringContent(
@@ -96,7 +97,7 @@ public class SonarrClient : ArrClient, ISonarrClient
     }
 
     private static string GetSearchLog(
-        SonarrSearchType searchType,
+        SeriesSearchType searchType,
         Uri instanceUrl,
         SonarrCommand command,
         bool success,
@@ -107,22 +108,22 @@ public class SonarrClient : ArrClient, ISonarrClient
         
         return searchType switch
         {
-            SonarrSearchType.Episode =>
+            SeriesSearchType.Episode =>
                 $"episodes search {status} | {instanceUrl} | {logContext ?? $"episode ids: {string.Join(',', command.EpisodeIds)}"}",
-            SonarrSearchType.Season =>
+            SeriesSearchType.Season =>
                 $"season search {status} | {instanceUrl} | {logContext ?? $"season: {command.SeasonNumber} series id: {command.SeriesId}"}",
-            SonarrSearchType.Series => $"series search {status} | {instanceUrl} | {logContext ?? $"series id: {command.SeriesId}"}",
+            SeriesSearchType.Series => $"series search {status} | {instanceUrl} | {logContext ?? $"series id: {command.SeriesId}"}",
             _ => throw new ArgumentOutOfRangeException(nameof(searchType), searchType, null)
         };
     }
 
-    private async Task<string?> ComputeCommandLogContextAsync(ArrInstance arrInstance, SonarrCommand command, SonarrSearchType searchType)
+    private async Task<string?> ComputeCommandLogContextAsync(ArrInstance arrInstance, SonarrCommand command, SeriesSearchType searchType)
     {
         try
         {
             StringBuilder log = new();
 
-            if (searchType is SonarrSearchType.Episode)
+            if (searchType is SeriesSearchType.Episode)
             {
                 var episodes = await GetEpisodesAsync(arrInstance, command.EpisodeIds);
 
@@ -164,7 +165,7 @@ public class SonarrClient : ArrClient, ISonarrClient
                 }
             }
 
-            if (searchType is SonarrSearchType.Season)
+            if (searchType is SeriesSearchType.Season)
             {
                 Series? show = await GetSeriesAsync(arrInstance, command.SeriesId.Value);
 
@@ -176,7 +177,7 @@ public class SonarrClient : ArrClient, ISonarrClient
                 log.Append($"[{show.Title} season {command.SeasonNumber}]");
             }
 
-            if (searchType is SonarrSearchType.Series)
+            if (searchType is SeriesSearchType.Series)
             {
                 Series? show = await GetSeriesAsync(arrInstance, command.SeriesId.Value);
 
@@ -229,7 +230,7 @@ public class SonarrClient : ArrClient, ISonarrClient
         return JsonConvert.DeserializeObject<Series>(responseBody);
     }
 
-    private List<SonarrCommand> GetSearchCommands(HashSet<SonarrSearchItem> items)
+    private List<SonarrCommand> GetSearchCommands(HashSet<SeriesSearchItem> items)
     {
         const string episodeSearch = "EpisodeSearch";
         const string seasonSearch = "SeasonSearch";
@@ -237,29 +238,29 @@ public class SonarrClient : ArrClient, ISonarrClient
         
         List<SonarrCommand> commands = new();
 
-        foreach (SonarrSearchItem item in items)
+        foreach (SeriesSearchItem item in items)
         {
-            SonarrCommand command = item.SearchType is SonarrSearchType.Episode
+            SonarrCommand command = item.SearchType is SeriesSearchType.Episode
                 ? commands.FirstOrDefault() ?? new() { Name = episodeSearch, EpisodeIds = new() }
                 : new();
             
             switch (item.SearchType)
             {
-                case SonarrSearchType.Episode when command.EpisodeIds is null:
+                case SeriesSearchType.Episode when command.EpisodeIds is null:
                     command.EpisodeIds = [item.Id];
                     break;
                 
-                case SonarrSearchType.Episode when command.EpisodeIds is not null:
+                case SeriesSearchType.Episode when command.EpisodeIds is not null:
                     command.EpisodeIds.Add(item.Id);
                     break;
                 
-                case SonarrSearchType.Season:
+                case SeriesSearchType.Season:
                     command.Name = seasonSearch;
                     command.SeasonNumber = item.Id;
-                    command.SeriesId = ((SonarrSearchItem)item).SeriesId;
+                    command.SeriesId = ((SeriesSearchItem)item).SeriesId;
                     break;
                 
-                case SonarrSearchType.Series:
+                case SeriesSearchType.Series:
                     command.Name = seriesSearch;
                     command.SeriesId = item.Id;
                     break;
@@ -268,7 +269,7 @@ public class SonarrClient : ArrClient, ISonarrClient
                     throw new ArgumentOutOfRangeException(nameof(item.SearchType), item.SearchType, null);
             }
 
-            if (item.SearchType is SonarrSearchType.Episode && commands.Count > 0)
+            if (item.SearchType is SeriesSearchType.Episode && commands.Count > 0)
             {
                 // only one command will be generated for episodes search
                 continue;

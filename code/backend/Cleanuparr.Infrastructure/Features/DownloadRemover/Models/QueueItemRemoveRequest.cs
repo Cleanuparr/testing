@@ -1,7 +1,7 @@
-﻿using Cleanuparr.Domain.Enums;
+﻿using Cleanuparr.Domain.Entities.Arr.Queue;
+using Cleanuparr.Domain.Enums;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
 using Data.Models.Arr;
-using Data.Models.Arr.Queue;
 
 namespace Cleanuparr.Infrastructure.Features.DownloadRemover.Models;
 

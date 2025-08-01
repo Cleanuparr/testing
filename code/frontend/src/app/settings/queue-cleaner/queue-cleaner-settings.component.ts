@@ -14,6 +14,7 @@ import {
 } from "../../shared/models/queue-cleaner-config.model";
 import { SettingsCardComponent } from "../components/settings-card/settings-card.component";
 import { ByteSizeInputComponent } from "../../shared/components/byte-size-input/byte-size-input.component";
+import { MobileAutocompleteComponent } from "../../shared/components/mobile-autocomplete/mobile-autocomplete.component";
 
 // PrimeNG Components
 import { CardModule } from "primeng/card";
@@ -27,10 +28,12 @@ import { ChipsModule } from "primeng/chips";
 import { ToastModule } from "primeng/toast";
 // Using centralized NotificationService instead of MessageService
 import { NotificationService } from "../../core/services/notification.service";
+import { DocumentationService } from "../../core/services/documentation.service";
 import { SelectModule } from "primeng/select";
 import { AutoCompleteModule } from "primeng/autocomplete";
 import { DropdownModule } from "primeng/dropdown";
 import { LoadingErrorStateComponent } from "../../shared/components/loading-error-state/loading-error-state.component";
+import { ErrorHandlerUtil } from "../../core/utils/error-handler.util";
 
 @Component({
   selector: "app-queue-cleaner-settings",
@@ -52,6 +55,7 @@ import { LoadingErrorStateComponent } from "../../shared/components/loading-erro
     AutoCompleteModule,
     DropdownModule,
     LoadingErrorStateComponent,
+    MobileAutocompleteComponent,
   ],
   providers: [QueueCleanerConfigStore],
   templateUrl: "./queue-cleaner-settings.component.html",
@@ -94,13 +98,15 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
   private formBuilder = inject(FormBuilder);
   // Using the notification service for all toast messages
   private notificationService = inject(NotificationService);
+  private documentationService = inject(DocumentationService);
   private queueCleanerStore = inject(QueueCleanerConfigStore);
 
   // Signals from the store
   readonly queueCleanerConfig = this.queueCleanerStore.config;
   readonly queueCleanerLoading = this.queueCleanerStore.loading;
   readonly queueCleanerSaving = this.queueCleanerStore.saving;
-  readonly queueCleanerError = this.queueCleanerStore.error;
+  readonly queueCleanerLoadError = this.queueCleanerStore.loadError;  // Only for "Not connected" state
+  readonly queueCleanerSaveError = this.queueCleanerStore.saveError;  // Only for toast notifications
 
   // Track active accordion tabs
   activeAccordionIndices: number[] = [];
@@ -113,6 +119,14 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
    */
   canDeactivate(): boolean {
     return !this.queueCleanerForm.dirty;
+  }
+
+  /**
+   * Open field-specific documentation in a new tab
+   * @param fieldName The form field name (e.g., 'enabled', 'failedImport.maxStrikes')
+   */
+  openFieldDocs(fieldName: string): void {
+    this.documentationService.openFieldDocumentation('queue-cleaner', fieldName);
   }
 
   constructor() {
@@ -128,7 +142,7 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
 
       // Failed Import settings - nested group
       failedImport: this.formBuilder.group({
-        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(5000)]],
         ignorePrivate: [{ value: false, disabled: true }],
         deletePrivate: [{ value: false, disabled: true }],
         ignoredPatterns: [{ value: [], disabled: true }],
@@ -136,21 +150,21 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
 
       // Stalled settings - nested group
       stalled: this.formBuilder.group({
-        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(5000)]],
         resetStrikesOnProgress: [{ value: false, disabled: true }],
         ignorePrivate: [{ value: false, disabled: true }],
         deletePrivate: [{ value: false, disabled: true }],
-        downloadingMetadataMaxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+        downloadingMetadataMaxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(5000)]],
       }),
 
       // Slow Download settings - nested group
       slow: this.formBuilder.group({
-        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+        maxStrikes: [0, [Validators.required, Validators.min(0), Validators.max(5000)]],
         resetStrikesOnProgress: [{ value: false, disabled: true }],
         ignorePrivate: [{ value: false, disabled: true }],
         deletePrivate: [{ value: false, disabled: true }],
         minSpeed: [{ value: "", disabled: true }],
-        maxTime: [{ value: 0, disabled: true }, [Validators.required, Validators.min(0), Validators.max(168)]],
+        maxTime: [{ value: 0, disabled: true }, [Validators.required, Validators.min(0), Validators.max(1000)]],
         ignoreAboveSize: [{ value: "", disabled: true }],
       }),
 
@@ -190,13 +204,30 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
       }
     });
     
-    // Effect to handle errors - only emit to parent but don't show toast
-    // (will be displayed by the LoadingErrorStateComponent)
+    // Effect to handle load errors - emit to LoadingErrorStateComponent for "Not connected" display
     effect(() => {
-      const errorMessage = this.queueCleanerError();
-      if (errorMessage) {
-        // Only emit the error for parent components
-        this.error.emit(errorMessage);
+      const loadErrorMessage = this.queueCleanerLoadError();
+      if (loadErrorMessage) {
+        // Load errors should be shown as "Not connected to server" in LoadingErrorStateComponent
+        this.error.emit(loadErrorMessage);
+      }
+    });
+    
+    // Effect to handle save errors - show as toast notifications for user to fix
+    effect(() => {
+      const saveErrorMessage = this.queueCleanerSaveError();
+      if (saveErrorMessage) {
+        // Check if this looks like a validation error from the backend
+        // These are typically user-fixable errors that should be shown as toasts
+        const isUserFixableError = ErrorHandlerUtil.isUserFixableError(saveErrorMessage);
+        
+        if (isUserFixableError) {
+          // Show validation errors as toast notifications so user can fix them
+          this.notificationService.showError(saveErrorMessage);
+        } else {
+          // For non-user-fixable save errors, also emit to parent
+          this.error.emit(saveErrorMessage);
+        }
       }
     });
     
@@ -231,21 +262,27 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
       advancedControl.valueChanges.pipe(takeUntil(this.destroy$))
         .subscribe((useAdvanced: boolean) => {
           const enabled = this.queueCleanerForm.get('enabled')?.value || false;
-          if (enabled) {
-            const cronExpressionControl = this.queueCleanerForm.get('cronExpression');
-            const jobScheduleGroup = this.queueCleanerForm.get('jobSchedule') as FormGroup;
-            const everyControl = jobScheduleGroup?.get('every');
-            const typeControl = jobScheduleGroup?.get('type');
-            
-            if (useAdvanced) {
-              if (cronExpressionControl) cronExpressionControl.enable();
-              if (everyControl) everyControl.disable();
-              if (typeControl) typeControl.disable();
-            } else {
-              if (cronExpressionControl) cronExpressionControl.disable();
-              if (everyControl) everyControl.enable();
-              if (typeControl) typeControl.enable();
-            }
+          const cronExpressionControl = this.queueCleanerForm.get('cronExpression');
+          const jobScheduleGroup = this.queueCleanerForm.get('jobSchedule') as FormGroup;
+          const everyControl = jobScheduleGroup?.get('every');
+          const typeControl = jobScheduleGroup?.get('type');
+          
+          // Update scheduling controls based on mode, regardless of enabled state
+          if (useAdvanced) {
+            if (cronExpressionControl) cronExpressionControl.enable();
+            if (everyControl) everyControl.disable();
+            if (typeControl) typeControl.disable();
+          } else {
+            if (cronExpressionControl) cronExpressionControl.disable();
+            if (everyControl) everyControl.enable();
+            if (typeControl) typeControl.enable();
+          }
+          
+          // Then respect the main enabled state - if disabled, disable all scheduling controls
+          if (!enabled) {
+            cronExpressionControl?.disable();
+            everyControl?.disable();
+            typeControl?.disable();
           }
         });
     }
@@ -490,14 +527,17 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
       // Make a copy of the form values
       const formValue = this.queueCleanerForm.getRawValue();
       
+      // Determine the correct cron expression to use
+      const cronExpression: string = formValue.useAdvancedScheduling ? 
+        formValue.cronExpression : 
+        // If in basic mode, generate cron expression from the schedule
+        this.queueCleanerStore.generateCronExpression(formValue.jobSchedule);
+      
       // Create the config object to be saved
       const queueCleanerConfig: QueueCleanerConfig = {
         enabled: formValue.enabled,
         useAdvancedScheduling: formValue.useAdvancedScheduling,
-        cronExpression: formValue.useAdvancedScheduling ? 
-          formValue.cronExpression : 
-          // If in basic mode, generate cron expression from the schedule
-          this.queueCleanerStore.generateCronExpression(formValue.jobSchedule),
+        cronExpression: cronExpression,
         jobSchedule: formValue.jobSchedule,
         failedImport: {
           maxStrikes: formValue.failedImport?.maxStrikes || 0,
@@ -530,9 +570,9 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
       // This pattern works with signals since we're not trying to pipe the signal itself
       const checkSaveCompletion = () => {
         const saving = this.queueCleanerSaving();
-        const error = this.queueCleanerError();
+        const saveError = this.queueCleanerSaveError();
         
-        if (!saving && !error) {
+        if (!saving && !saveError) {
           // Mark form as pristine after successful save
           this.queueCleanerForm.markAsPristine();
           // Update original values reference
@@ -541,9 +581,9 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
           this.saved.emit();
           // Display success message
           this.notificationService.showSuccess('Queue cleaner configuration saved successfully.');
-        } else if (!saving && error) {
-          // If there's an error, we can stop checking
-          // No need to show error toast here, it's handled by the LoadingErrorStateComponent
+        } else if (!saving && saveError) {
+          // If there's a save error, we can stop checking
+          // Toast notification is already handled by the effect above
         } else {
           // If still saving, check again in a moment
           setTimeout(checkSaveCompletion, 100);
@@ -635,7 +675,7 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
    */
   hasError(controlName: string, errorName: string): boolean {
     const control = this.queueCleanerForm.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
   
   /**
@@ -663,6 +703,8 @@ export class QueueCleanerSettingsComponent implements OnDestroy, CanComponentDea
     }
 
     const control = parentControl.get(controlName);
-    return control ? control.touched && control.hasError(errorName) : false;
+    return control ? control.dirty && control.hasError(errorName) : false;
   }
+  
+
 }

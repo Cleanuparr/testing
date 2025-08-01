@@ -1,3 +1,5 @@
+using Cleanuparr.Domain.Entities.Arr;
+using Cleanuparr.Domain.Entities.Arr.Queue;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Events;
 using Cleanuparr.Infrastructure.Features.Arr;
@@ -12,7 +14,6 @@ using Cleanuparr.Persistence.Models.Configuration.DownloadCleaner;
 using Cleanuparr.Persistence.Models.Configuration.General;
 using Cleanuparr.Persistence.Models.Configuration.QueueCleaner;
 using Data.Models.Arr;
-using Data.Models.Arr.Queue;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -52,68 +53,6 @@ public abstract class GenericHandler : IHandler
         _dataContext = dataContext;
     }
 
-    // /// <summary>
-    // /// Initialize download services based on configuration
-    // /// </summary>
-    // protected async Task<List<IDownloadService>> GetDownloadServices()
-    // {
-    //     var clients = await _dataContext.DownloadClients
-    //         .AsNoTracking()
-    //         .ToListAsync();
-    //     
-    //     if (clients.Count is 0)
-    //     {
-    //         _logger.LogWarning("No download clients configured");
-    //         return [];
-    //     }
-    //     
-    //     var enabledClients = await _dataContext.DownloadClients
-    //         .Where(c => c.Enabled)
-    //         .ToListAsync();
-    //
-    //     if (enabledClients.Count == 0)
-    //     {
-    //         _logger.LogWarning("No enabled download clients available");
-    //         return [];
-    //     }
-    //     
-    //     List<IDownloadService> downloadServices = [];
-    //     
-    //     // Add all enabled clients
-    //     foreach (var client in enabledClients)
-    //     {
-    //         try
-    //         {
-    //             var service = _downloadServiceFactory.GetDownloadService(client);
-    //             if (service != null)
-    //             {
-    //                 await service.LoginAsync();
-    //                 downloadServices.Add(service);
-    //                 _logger.LogDebug("Initialized download client: {name}", client.Name);
-    //             }
-    //             else
-    //             {
-    //                 _logger.LogWarning("Download client service not available for: {name}", client.Name);
-    //             }
-    //         }
-    //         catch (Exception ex)
-    //         {
-    //             _logger.LogError(ex, "Failed to initialize download client: {name}", client.Name);
-    //         }
-    //     }
-    //     
-    //     if (downloadServices.Count == 0)
-    //     {
-    //         _logger.LogWarning("No valid download clients found");
-    //     }
-    //     else
-    //     {
-    //         _logger.LogDebug("Initialized {count} download clients", downloadServices.Count);
-    //     }
-    //
-    //     return downloadServices;
-    // }
-
     public async Task ExecuteAsync()
     {
         await DataContext.Lock.WaitAsync();
@@ -130,9 +69,15 @@ public abstract class GenericHandler : IHandler
             ContextProvider.Set(nameof(InstanceType.Lidarr), await _dataContext.ArrConfigs.AsNoTracking()
                 .Include(x => x.Instances)
                 .FirstAsync(x => x.Type == InstanceType.Lidarr));
+            ContextProvider.Set(nameof(InstanceType.Readarr), await _dataContext.ArrConfigs.AsNoTracking()
+                .Include(x => x.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Readarr));
+            ContextProvider.Set(nameof(InstanceType.Whisparr), await _dataContext.ArrConfigs.AsNoTracking()
+                .Include(x => x.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Whisparr));
             ContextProvider.Set(nameof(QueueCleanerConfig), await _dataContext.QueueCleanerConfigs.AsNoTracking().FirstAsync());
             ContextProvider.Set(nameof(ContentBlockerConfig), await _dataContext.ContentBlockerConfigs.AsNoTracking().FirstAsync());
-            ContextProvider.Set(nameof(DownloadCleanerConfig), await _dataContext.DownloadCleanerConfigs.AsNoTracking().FirstAsync());
+            ContextProvider.Set(nameof(DownloadCleanerConfig), await _dataContext.DownloadCleanerConfigs.Include(x => x.Categories).AsNoTracking().FirstAsync());
             ContextProvider.Set(nameof(DownloadClientConfig), await _dataContext.DownloadClients.AsNoTracking()
                 .Where(x => x.Enabled)
                 .ToListAsync());
@@ -195,14 +140,14 @@ public abstract class GenericHandler : IHandler
             return;
         }
         
-        if (instanceType is InstanceType.Sonarr)
+        if (instanceType is InstanceType.Sonarr or InstanceType.Whisparr)
         {
-            QueueItemRemoveRequest<SonarrSearchItem> removeRequest = new()
+            QueueItemRemoveRequest<SeriesSearchItem> removeRequest = new()
             {
                 InstanceType = instanceType,
                 Instance = instance,
                 Record = record,
-                SearchItem = (SonarrSearchItem)GetRecordSearchItem(instanceType, record, isPack),
+                SearchItem = (SeriesSearchItem)GetRecordSearchItem(instanceType, record, isPack),
                 RemoveFromClient = removeFromClient,
                 DeleteReason = deleteReason
             };
@@ -232,17 +177,17 @@ public abstract class GenericHandler : IHandler
     {
         return type switch
         {
-            InstanceType.Sonarr when !isPack => new SonarrSearchItem
+            InstanceType.Sonarr when !isPack => new SeriesSearchItem
             {
                 Id = record.EpisodeId,
                 SeriesId = record.SeriesId,
-                SearchType = SonarrSearchType.Episode
+                SearchType = SeriesSearchType.Episode
             },
-            InstanceType.Sonarr when isPack => new SonarrSearchItem
+            InstanceType.Sonarr when isPack => new SeriesSearchItem
             {
                 Id = record.SeasonNumber,
                 SeriesId = record.SeriesId,
-                SearchType = SonarrSearchType.Season
+                SearchType = SeriesSearchType.Season
             },
             InstanceType.Radarr => new SearchItem
             {
@@ -251,6 +196,22 @@ public abstract class GenericHandler : IHandler
             InstanceType.Lidarr => new SearchItem
             {
                 Id = record.AlbumId
+            },
+            InstanceType.Readarr => new SearchItem
+            {
+                Id = record.BookId
+            },
+            InstanceType.Whisparr when !isPack => new SeriesSearchItem
+            {
+                Id = record.EpisodeId,
+                SeriesId = record.SeriesId,
+                SearchType = SeriesSearchType.Episode
+            },
+            InstanceType.Whisparr when isPack => new SeriesSearchItem
+            {
+                Id = record.SeasonNumber,
+                SeriesId = record.SeriesId,
+                SearchType = SeriesSearchType.Season
             },
             _ => throw new NotImplementedException($"instance type {type} is not yet supported")
         };

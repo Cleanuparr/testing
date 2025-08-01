@@ -2,10 +2,11 @@ using Cleanuparr.Api.Models;
 using Cleanuparr.Application.Features.Arr.Dtos;
 using Cleanuparr.Application.Features.DownloadClient.Dtos;
 using Cleanuparr.Domain.Enums;
-using Cleanuparr.Infrastructure.Helpers;
+using Cleanuparr.Domain.Exceptions;
 using Cleanuparr.Infrastructure.Http.DynamicHttpClientSystem;
 using Cleanuparr.Infrastructure.Logging;
 using Cleanuparr.Infrastructure.Models;
+using Cleanuparr.Infrastructure.Services.Interfaces;
 using Cleanuparr.Infrastructure.Utilities;
 using Cleanuparr.Persistence;
 using Cleanuparr.Persistence.Models.Configuration;
@@ -15,7 +16,6 @@ using Cleanuparr.Persistence.Models.Configuration.DownloadCleaner;
 using Cleanuparr.Persistence.Models.Configuration.General;
 using Cleanuparr.Persistence.Models.Configuration.Notification;
 using Cleanuparr.Persistence.Models.Configuration.QueueCleaner;
-using Infrastructure.Services.Interfaces;
 using Mapster;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -151,7 +151,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create download client");
-            return StatusCode(500, "Failed to create download client configuration");
+            throw;
         }
         finally
         {
@@ -188,7 +188,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update download client with ID {Id}", id);
-            return StatusCode(500, "Failed to update download client configuration");
+            throw;
         }
         finally
         {
@@ -229,7 +229,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete download client with ID {Id}", id);
-            return StatusCode(500, "Failed to delete download client configuration");
+            throw;
         }
         finally
         {
@@ -300,6 +300,42 @@ public class ConfigurationController : ControllerBase
                 .Include(x => x.Instances)
                 .AsNoTracking()
                 .FirstAsync(x => x.Type == InstanceType.Lidarr);
+            return Ok(config.Adapt<ArrConfigDto>());
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpGet("readarr")]
+    public async Task<IActionResult> GetReadarrConfig()
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            var config = await _dataContext.ArrConfigs
+                .Include(x => x.Instances)
+                .AsNoTracking()
+                .FirstAsync(x => x.Type == InstanceType.Readarr);
+            return Ok(config.Adapt<ArrConfigDto>());
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpGet("whisparr")]
+    public async Task<IActionResult> GetWhisparrConfig()
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            var config = await _dataContext.ArrConfigs
+                .Include(x => x.Instances)
+                .AsNoTracking()
+                .FirstAsync(x => x.Type == InstanceType.Whisparr);
             return Ok(config.Adapt<ArrConfigDto>());
         }
         finally
@@ -394,7 +430,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save Notifications configuration");
-            return StatusCode(500, "Failed to save Notifications configuration");
+            throw;
         }
         finally
         {
@@ -439,7 +475,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save QueueCleaner configuration");
-            return StatusCode(500, "Failed to save QueueCleaner configuration");
+            throw;
         }
         finally
         {
@@ -484,7 +520,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save ContentBlocker configuration");
-            return StatusCode(500, "Failed to save ContentBlocker configuration");
+            throw;
         }
         finally
         {
@@ -510,25 +546,25 @@ public class ConfigurationController : ControllerBase
                 // Check for duplicate category names
                 if (newConfigDto.Categories.GroupBy(x => x.Name).Any(x => x.Count() > 1))
                 {
-                    return BadRequest("Duplicate clean categories found");
+                    throw new ValidationException("Duplicate category names found");
                 }
                 
                 // Validate each category
                 foreach (var categoryDto in newConfigDto.Categories)
                 {
-                    if (string.IsNullOrEmpty(categoryDto.Name?.Trim()))
+                    if (string.IsNullOrEmpty(categoryDto.Name.Trim()))
                     {
-                        return BadRequest("Category name cannot be empty");
+                        throw new ValidationException("Category name cannot be empty");
                     }
                     
-                    if (categoryDto.MaxRatio < 0 && categoryDto.MaxSeedTime < 0)
+                    if (categoryDto is { MaxRatio: < 0, MaxSeedTime: < 0 })
                     {
-                        return BadRequest("Both max ratio and max seed time cannot be disabled");
+                        throw new ValidationException("Either max ratio or max seed time must be enabled");
                     }
                     
                     if (categoryDto.MinSeedTime < 0)
                     {
-                        return BadRequest("Min seed time cannot be negative");
+                        throw new ValidationException("Min seed time cannot be negative");
                     }
                 }
             }
@@ -538,27 +574,27 @@ public class ConfigurationController : ControllerBase
             {
                 if (string.IsNullOrEmpty(newConfigDto.UnlinkedTargetCategory))
                 {
-                    return BadRequest("Unlinked target category is required");
+                    throw new ValidationException("Unlinked target category cannot be empty");
                 }
 
                 if (newConfigDto.UnlinkedCategories?.Count is null or 0)
                 {
-                    return BadRequest("No unlinked categories configured");
+                    throw new ValidationException("Unlinked categories cannot be empty");
                 }
 
                 if (newConfigDto.UnlinkedCategories.Contains(newConfigDto.UnlinkedTargetCategory))
                 {
-                    return BadRequest("The unlinked target category should not be present in unlinked categories");
+                    throw new ValidationException("The unlinked target category should not be present in unlinked categories");
                 }
 
                 if (newConfigDto.UnlinkedCategories.Any(string.IsNullOrEmpty))
                 {
-                    return BadRequest("Empty unlinked category filter found");
+                    throw new ValidationException("Empty unlinked category filter found");
                 }
 
                 if (!string.IsNullOrEmpty(newConfigDto.UnlinkedIgnoredRootDir) && !Directory.Exists(newConfigDto.UnlinkedIgnoredRootDir))
                 {
-                    return BadRequest($"{newConfigDto.UnlinkedIgnoredRootDir} root directory does not exist");
+                    throw new ValidationException($"{newConfigDto.UnlinkedIgnoredRootDir} root directory does not exist");
                 }
             }
 
@@ -608,7 +644,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save DownloadCleaner configuration");
-            return StatusCode(500, "Failed to save DownloadCleaner configuration");
+            throw;
         }
         finally
         {
@@ -672,7 +708,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save General configuration");
-            return StatusCode(500, "Failed to save General configuration");
+            throw;
         }
         finally
         {
@@ -703,7 +739,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save Sonarr configuration");
-            return StatusCode(500, "Failed to save Sonarr configuration");
+            throw;
         }
         finally
         {
@@ -734,7 +770,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save Radarr configuration");
-            return StatusCode(500, "Failed to save Radarr configuration");
+            throw;
         }
         finally
         {
@@ -765,7 +801,69 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save Lidarr configuration");
-            return StatusCode(500, "Failed to save Lidarr configuration");
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPut("readarr")]
+    public async Task<IActionResult> UpdateReadarrConfig([FromBody] UpdateReadarrConfigDto newConfigDto)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get existing config
+            var config = await _dataContext.ArrConfigs
+                .FirstAsync(x => x.Type == InstanceType.Readarr);
+
+            config.FailedImportMaxStrikes = newConfigDto.FailedImportMaxStrikes;
+
+            // Validate the configuration
+            config.Validate();
+
+            // Persist the configuration
+            await _dataContext.SaveChangesAsync();
+
+            return Ok(new { Message = "Readarr configuration updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save Readarr configuration");
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPut("whisparr")]
+    public async Task<IActionResult> UpdateWhisparrConfig([FromBody] UpdateWhisparrConfigDto newConfigDto)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get existing config
+            var config = await _dataContext.ArrConfigs
+                .FirstAsync(x => x.Type == InstanceType.Whisparr);
+
+            config.FailedImportMaxStrikes = newConfigDto.FailedImportMaxStrikes;
+
+            // Validate the configuration
+            config.Validate();
+
+            // Persist the configuration
+            await _dataContext.SaveChangesAsync();
+
+            return Ok(new { Message = "Whisparr configuration updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save Whisparr configuration");
+            throw;
         }
         finally
         {
@@ -836,7 +934,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create Sonarr instance");
-            return StatusCode(500, "Failed to create Sonarr instance");
+            throw;
         }
         finally
         {
@@ -874,7 +972,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update Sonarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to update Sonarr instance");
+            throw;
         }
         finally
         {
@@ -908,7 +1006,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete Sonarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to delete Sonarr instance");
+            throw;
         }
         finally
         {
@@ -946,7 +1044,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create Radarr instance");
-            return StatusCode(500, "Failed to create Radarr instance");
+            throw;
         }
         finally
         {
@@ -984,7 +1082,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update Radarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to update Radarr instance");
+            throw;
         }
         finally
         {
@@ -1018,7 +1116,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete Radarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to delete Radarr instance");
+            throw;
         }
         finally
         {
@@ -1057,7 +1155,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create Lidarr instance");
-            return StatusCode(500, "Failed to create Lidarr instance");
+            throw;
         }
         finally
         {
@@ -1095,7 +1193,7 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update Lidarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to update Lidarr instance");
+            throw;
         }
         finally
         {
@@ -1129,7 +1227,227 @@ public class ConfigurationController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete Lidarr instance with ID {Id}", id);
-            return StatusCode(500, "Failed to delete Lidarr instance");
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPost("readarr/instances")]
+    public async Task<IActionResult> CreateReadarrInstance([FromBody] CreateArrInstanceDto newInstance)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Readarr config to add the instance to
+            var config = await _dataContext.ArrConfigs
+                .FirstAsync(x => x.Type == InstanceType.Readarr);
+
+            // Create the new instance
+            var instance = new ArrInstance
+            {
+                Enabled = newInstance.Enabled,
+                Name = newInstance.Name,
+                Url = new Uri(newInstance.Url),
+                ApiKey = newInstance.ApiKey,
+                ArrConfigId = config.Id,
+            };
+            
+            // Add to the config's instances collection
+            await _dataContext.ArrInstances.AddAsync(instance);
+            // Save changes
+            await _dataContext.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetReadarrConfig), new { id = instance.Id }, instance.Adapt<ArrInstanceDto>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create Readarr instance");
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPut("readarr/instances/{id}")]
+    public async Task<IActionResult> UpdateReadarrInstance(Guid id, [FromBody] CreateArrInstanceDto updatedInstance)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Readarr config and find the instance
+            var config = await _dataContext.ArrConfigs
+                .Include(c => c.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Readarr);
+
+            var instance = config.Instances.FirstOrDefault(i => i.Id == id);
+            if (instance == null)
+            {
+                return NotFound($"Readarr instance with ID {id} not found");
+            }
+
+            // Update the instance properties
+            instance.Enabled = updatedInstance.Enabled;
+            instance.Name = updatedInstance.Name;
+            instance.Url = new Uri(updatedInstance.Url);
+            instance.ApiKey = updatedInstance.ApiKey;
+
+            await _dataContext.SaveChangesAsync();
+
+            return Ok(instance.Adapt<ArrInstanceDto>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update Readarr instance with ID {Id}", id);
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpDelete("readarr/instances/{id}")]
+    public async Task<IActionResult> DeleteReadarrInstance(Guid id)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Readarr config and find the instance
+            var config = await _dataContext.ArrConfigs
+                .Include(c => c.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Readarr);
+
+            var instance = config.Instances.FirstOrDefault(i => i.Id == id);
+            if (instance == null)
+            {
+                return NotFound($"Readarr instance with ID {id} not found");
+            }
+
+            // Remove the instance
+            config.Instances.Remove(instance);
+            await _dataContext.SaveChangesAsync();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete Readarr instance with ID {Id}", id);
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPost("whisparr/instances")]
+    public async Task<IActionResult> CreateWhisparrInstance([FromBody] CreateArrInstanceDto newInstance)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Whisparr config to add the instance to
+            var config = await _dataContext.ArrConfigs
+                .FirstAsync(x => x.Type == InstanceType.Whisparr);
+
+            // Create the new instance
+            var instance = new ArrInstance
+            {
+                Enabled = newInstance.Enabled,
+                Name = newInstance.Name,
+                Url = new Uri(newInstance.Url),
+                ApiKey = newInstance.ApiKey,
+                ArrConfigId = config.Id,
+            };
+            
+            // Add to the config's instances collection
+            await _dataContext.ArrInstances.AddAsync(instance);
+            // Save changes
+            await _dataContext.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetWhisparrConfig), new { id = instance.Id }, instance.Adapt<ArrInstanceDto>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create Whisparr instance");
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpPut("whisparr/instances/{id}")]
+    public async Task<IActionResult> UpdateWhisparrInstance(Guid id, [FromBody] CreateArrInstanceDto updatedInstance)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Whisparr config and find the instance
+            var config = await _dataContext.ArrConfigs
+                .Include(c => c.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Whisparr);
+
+            var instance = config.Instances.FirstOrDefault(i => i.Id == id);
+            if (instance == null)
+            {
+                return NotFound($"Whisparr instance with ID {id} not found");
+            }
+
+            // Update the instance properties
+            instance.Enabled = updatedInstance.Enabled;
+            instance.Name = updatedInstance.Name;
+            instance.Url = new Uri(updatedInstance.Url);
+            instance.ApiKey = updatedInstance.ApiKey;
+
+            await _dataContext.SaveChangesAsync();
+
+            return Ok(instance.Adapt<ArrInstanceDto>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update Whisparr instance with ID {Id}", id);
+            throw;
+        }
+        finally
+        {
+            DataContext.Lock.Release();
+        }
+    }
+
+    [HttpDelete("whisparr/instances/{id}")]
+    public async Task<IActionResult> DeleteWhisparrInstance(Guid id)
+    {
+        await DataContext.Lock.WaitAsync();
+        try
+        {
+            // Get the Whisparr config and find the instance
+            var config = await _dataContext.ArrConfigs
+                .Include(c => c.Instances)
+                .FirstAsync(x => x.Type == InstanceType.Whisparr);
+
+            var instance = config.Instances.FirstOrDefault(i => i.Id == id);
+            if (instance == null)
+            {
+                return NotFound($"Whisparr instance with ID {id} not found");
+            }
+
+            // Remove the instance
+            config.Instances.Remove(instance);
+            await _dataContext.SaveChangesAsync();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete Whisparr instance with ID {Id}", id);
+            throw;
         }
         finally
         {

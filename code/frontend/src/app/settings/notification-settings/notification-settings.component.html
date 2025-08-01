@@ -10,9 +10,6 @@
           <h2 class="card-title m-0">Notification Configuration</h2>
           <span class="card-subtitle">Configure notification settings for Notifiarr and Apprise</span>
         </div>
-        <div class="flex align-items-center gap-2">
-          <i class="pi pi-bell text-xl"></i>
-        </div>
       </div>
     </ng-template>
   
@@ -35,7 +32,13 @@
           <div formGroupName="notifiarr">
                         <!-- API Key -->
             <div class="field-row">
-              <label class="field-label">API Key</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('notifiarr.apiKey')"
+                   title="Click for documentation">
+                </i>
+                API Key
+              </label>
               <div class="field-input">
                 <input type="text" pInputText formControlName="apiKey" inputId="notifiarrApiKey" placeholder="Enter Notifiarr API key" />
                 <small class="form-helper-text">Your Notifiarr API key for authentication</small>
@@ -44,7 +47,14 @@
 
             <!-- Channel ID -->
             <div class="field-row">
-              <label class="field-label">Channel ID</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('notifiarr.channelId')"
+                   title="Click for documentation">
+                </i>
+                Channel ID
+
+              </label>
               <div class="field-input">
                 <input type="text" pInputText formControlName="channelId" inputId="notifiarrChannelId" placeholder="Enter channel ID" />
                 <small class="form-helper-text">The channel ID where notifications will be sent</small>
@@ -53,7 +63,13 @@
   
             <!-- Event Triggers -->
             <div class="field-row">
-              <label class="field-label">Event Triggers</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('eventTriggers')"
+                   title="Click for documentation">
+                </i>
+                Event Triggers
+              </label>
               <div class="field-input">
                 <div class="flex flex-column gap-2">
                   <div class="flex align-items-center">
@@ -93,25 +109,58 @@
           <div formGroupName="apprise">
                         <!-- URL -->
             <div class="field-row">
-              <label class="field-label">URL</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('apprise.fullUrl')"
+                   title="Click for documentation">
+                </i>
+                URL
+              </label>
               <div class="field-input">
-                <input type="text" pInputText formControlName="url" inputId="appriseUrl" placeholder="Enter Apprise URL" />
+                <input type="text" pInputText formControlName="fullUrl" inputId="appriseUrl" placeholder="Enter Apprise URL" />
                 <small class="form-helper-text">The Apprise server URL</small>
               </div>
             </div>
 
             <!-- Key -->
             <div class="field-row">
-              <label class="field-label">Key</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('apprise.key')"
+                   title="Click for documentation">
+                </i>
+                Key
+              </label>
               <div class="field-input">
                 <input type="text" pInputText formControlName="key" inputId="appriseKey" placeholder="Enter key" />
                 <small class="form-helper-text">The key of your Apprise config</small>
               </div>
             </div>
+
+            <!-- Tags -->
+            <div class="field-row">
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('apprise.tags')"
+                   title="Click for documentation">
+                </i>
+                Tags
+              </label>
+              <div class="field-input">
+                <input type="text" pInputText formControlName="tags" inputId="appriseTags" placeholder="Enter tags (comma or space separated)" />
+                <small class="form-helper-text">Optionally notify only those tagged accordingly. Use a comma (,) to OR your tags and a space ( ) to AND them.</small>
+              </div>
+            </div>
   
             <!-- Event Triggers -->
             <div class="field-row">
-              <label class="field-label">Event Triggers</label>
+              <label class="field-label">
+                <i class="pi pi-info-circle field-info-icon" 
+                   (click)="openFieldDocs('eventTriggers')"
+                   title="Click for documentation">
+                </i>
+                Event Triggers
+              </label>
               <div class="field-input">
                 <div class="flex flex-column gap-2">
                   <div class="flex align-items-center">

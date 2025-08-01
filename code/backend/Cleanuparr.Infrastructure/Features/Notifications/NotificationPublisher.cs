@@ -1,11 +1,10 @@
 ﻿using System.Globalization;
+using Cleanuparr.Domain.Entities.Arr.Queue;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Features.Context;
 using Cleanuparr.Infrastructure.Features.Notifications.Models;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
-using Data.Models.Arr.Queue;
 using Infrastructure.Interceptors;
-using Infrastructure.Verticals.Notifications.Models;
 using Mapster;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -166,6 +165,8 @@ public class NotificationPublisher : INotificationPublisher
             InstanceType.Sonarr => record.Series?.Images?.FirstOrDefault(x => x.CoverType == "poster")?.RemoteUrl,
             InstanceType.Radarr => record.Movie?.Images?.FirstOrDefault(x => x.CoverType == "poster")?.RemoteUrl,
             InstanceType.Lidarr => record.Album?.Images?.FirstOrDefault(x => x.CoverType == "cover")?.Url,
+            InstanceType.Readarr => record.Book?.Images?.FirstOrDefault(x => x.CoverType == "cover")?.Url,
+            InstanceType.Whisparr => record.Series?.Images?.FirstOrDefault(x => x.CoverType == "poster")?.RemoteUrl,
             _ => throw new ArgumentOutOfRangeException(nameof(instanceType))
         };
 
