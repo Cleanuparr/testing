@@ -16,24 +16,34 @@ export class DocumentationService {
   private readonly fieldMappings: FieldDocumentationMapping = {
     'queue-cleaner': {
       'enabled': 'enable-queue-cleaner',
+      'ignoredDownloads': 'ignored-downloads',
       'useAdvancedScheduling': 'scheduling-mode',
       'cronExpression': 'cron-expression',
       'failedImport.maxStrikes': 'failed-import-max-strikes',
       'failedImport.ignorePrivate': 'failed-import-ignore-private',
       'failedImport.deletePrivate': 'failed-import-delete-private',
-      'failedImport.ignoredPatterns': 'failed-import-ignored-patterns',
-      'stalled.maxStrikes': 'stalled-max-strikes',
-      'stalled.resetStrikesOnProgress': 'stalled-reset-strikes-on-progress',
-      'stalled.ignorePrivate': 'stalled-ignore-private',
-      'stalled.deletePrivate': 'stalled-delete-private',
-      'stalled.downloadingMetadataMaxStrikes': 'downloading-metadata-max-strikes',
-      'slow.maxStrikes': 'slow-max-strikes',
-      'slow.resetStrikesOnProgress': 'slow-reset-strikes-on-progress',
-      'slow.ignorePrivate': 'slow-ignore-private',
-      'slow.deletePrivate': 'slow-delete-private',
-      'slow.minSpeed': 'slow-min-speed',
-      'slow.maxTime': 'slow-max-time',
-      'slow.ignoreAboveSize': 'slow-ignore-above-size'
+      'failedImport.skipIfNotFoundInClient': 'failed-import-skip-if-not-found-in-client',
+      'failedImport.pattern-mode': 'failed-import-pattern-mode',
+      'failedImport.patterns': 'failed-import-patterns',
+      'downloadingMetadataMaxStrikes': 'stalled-downloading-metadata-max-strikes',
+      'stallRule.name': 'stalled-rule-name',
+      'stallRule.enabled': 'stalled-enabled',
+      'stallRule.maxStrikes': 'stalled-max-strikes',
+      'stallRule.privacyType': 'stalled-privacy-type',
+      'stallRule.completionRange': 'stalled-completion-percentage-range',
+      'stallRule.resetStrikesOnProgress': 'stalled-reset-strikes-on-progress',
+      'stallRule.minimumProgress': 'stalled-minimum-progress-to-reset',
+      'stallRule.deletePrivateTorrentsFromClient': 'stalled-delete-private-from-client',
+      'slowRule.name': 'slow-rule-name',
+      'slowRule.enabled': 'slow-enabled',
+      'slowRule.maxStrikes': 'slow-max-strikes',
+      'slowRule.minSpeed': 'slow-min-speed',
+      'slowRule.maxTimeHours': 'slow-maximum-time-hours',
+      'slowRule.privacyType': 'slow-privacy-type',
+      'slowRule.completionRange': 'slow-completion-percentage-range',
+      'slowRule.ignoreAboveSize': 'slow-ignore-above-size',
+      'slowRule.resetStrikesOnProgress': 'slow-reset-strikes-on-progress',
+      'slowRule.deletePrivateTorrentsFromClient': 'slow-delete-private-from-client'
     },
     'general': {
       'displaySupportBanner': 'display-support-banner',
@@ -43,15 +53,20 @@ export class DocumentationService {
       'httpCertificateValidation': 'http-certificate-validation',
       'searchEnabled': 'search-enabled',
       'searchDelay': 'search-delay',
-      'logLevel': 'log-level',
+      'log.level': 'log-level',
+      'log.rollingSizeMB': 'rolling-size-mb',
+      'log.retainedFileCount': 'retained-file-count',
+      'log.timeLimitHours': 'time-limit',
+      'log.archiveEnabled': 'archive-enabled',
+      'log.archiveRetainedCount': 'archive-retained-count',
+      'log.archiveTimeLimitHours': 'archive-time-limit',
       'ignoredDownloads': 'ignored-downloads'
     },
     'download-cleaner': {
       'enabled': 'enable-download-cleaner',
+      'ignoredDownloads': 'ignored-downloads',
       'useAdvancedScheduling': 'scheduling-mode',
       'cronExpression': 'cron-expression',
-      'jobSchedule.every': 'run-schedule',
-      'jobSchedule.type': 'run-schedule',
       'deletePrivate': 'delete-private-torrents',
       'name': 'category-name',
       'maxRatio': 'max-ratio',
@@ -63,23 +78,23 @@ export class DocumentationService {
       'unlinkedIgnoredRootDir': 'ignored-root-directory',
       'unlinkedCategories': 'unlinked-categories'
     },
-    'content-blocker': {
-      'enabled': 'enable-content-blocker',
+    'malware-blocker': {
+      'enabled': 'enable-malware-blocker',
+      'ignoredDownloads': 'ignored-downloads',
       'useAdvancedScheduling': 'scheduling-mode',
       'cronExpression': 'cron-expression',
-      'jobSchedule.every': 'run-schedule',
-      'jobSchedule.type': 'run-schedule',
       'ignorePrivate': 'ignore-private',
       'deletePrivate': 'delete-private',
-      'sonarr.enabled': 'enable-sonarr-blocklist',
-      'sonarr.blocklistPath': 'sonarr-blocklist-path',
-      'sonarr.blocklistType': 'sonarr-blocklist-type',
-      'radarr.enabled': 'enable-radarr-blocklist',
-      'radarr.blocklistPath': 'radarr-blocklist-path',
-      'radarr.blocklistType': 'radarr-blocklist-type',
-      'lidarr.enabled': 'enable-lidarr-blocklist',
-      'lidarr.blocklistPath': 'lidarr-blocklist-path',
-      'lidarr.blocklistType': 'lidarr-blocklist-type'
+      'deleteKnownMalware': 'delete-known-malware',
+      'sonarr.enabled': 'enable-blocklist',
+      'sonarr.blocklistPath': 'blocklist-path',
+      'sonarr.blocklistType': 'blocklist-type',
+      'radarr.enabled': 'enable-blocklist',
+      'radarr.blocklistPath': 'blocklist-path',
+      'radarr.blocklistType': 'blocklist-type',
+      'lidarr.enabled': 'enable-blocklist',
+      'lidarr.blocklistPath': 'blocklist-path',
+      'lidarr.blocklistType': 'blocklist-type'
     },
     'download-client': {
       'enabled': 'enable-download-client',
@@ -90,14 +105,34 @@ export class DocumentationService {
       'username': 'username',
       'password': 'password'
     },
+    'blacklist-sync': {
+      'enabled': 'enable-blacklist-sync',
+      'blacklistPath': 'blacklist-path'
+    },
     'notifications': {
-      'notifiarr.apiKey': 'notifiarr-api-key',
-      'notifiarr.channelId': 'notifiarr-channel-id',
-      'apprise.fullUrl': 'apprise-url',
-      'apprise.key': 'apprise-key',
-      'eventTriggers': 'event-triggers'
-    }
-    // Additional sections will be added here as we implement them
+      'enabled': 'enabled',
+      'name': 'provider-name',
+      'eventTriggers': 'event-configuration'
+    },
+    'notifications/notifiarr': {
+      'notifiarr.apiKey': 'api-key',
+      'notifiarr.channelId': 'channel-id'
+    },
+    'notifications/apprise': {
+      'apprise.url': 'url',
+      'apprise.key': 'key',
+      'apprise.tags': 'tags'
+    },
+    'notifications/ntfy': {
+      'ntfy.serverUrl': 'server-url',
+      'ntfy.topics': 'topics',
+      'ntfy.authenticationType': 'authentication-type',
+      'ntfy.username': 'username',
+      'ntfy.password': 'password',
+      'ntfy.accessToken': 'access-token',
+      'ntfy.priority': 'priority',
+      'ntfy.tags': 'tags'
+    },
   };
 
   constructor(private applicationPathService: ApplicationPathService) {}
@@ -150,4 +185,4 @@ export class DocumentationService {
   hasFieldDocumentation(section: string, fieldName: string): boolean {
     return !!this.getFieldAnchor(section, fieldName);
   }
-} 
+}

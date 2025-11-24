@@ -6,6 +6,7 @@ namespace Cleanuparr.Infrastructure.Models;
 public enum JobType
 {
     QueueCleaner,
-    ContentBlocker,
-    DownloadCleaner
+    MalwareBlocker,
+    DownloadCleaner,
+    BlacklistSynchronizer,
 }

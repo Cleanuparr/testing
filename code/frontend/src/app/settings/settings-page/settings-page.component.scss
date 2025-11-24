@@ -48,22 +48,26 @@
       font-weight: 500;
       padding-top: 0.5rem;
     }
-    
-    .field-input {
-      width: 70%;
-      
-      .form-helper-text {
-        display: block;
-        color: var(--text-color-secondary);
-        margin-top: 0.5rem;
-        font-size: 0.85rem;
-      }
-      
-      input, .p-dropdown, .p-inputnumber {
-        width: 100%;
-      }
-    }
   }
+
+.field-input {
+  width: 70%;
+}
+
+.form-helper-text {
+  display: block;
+  color: var(--text-color-secondary);
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.form-error-text {
+  display: block;
+  color: var(--text-color-secondary);
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: red;
+}
   
   /* Card styling */
   ::ng-deep {
@@ -81,7 +85,7 @@
     }
     
     /* Input styling */
-    .p-inputtext, .p-dropdown, .p-inputnumber {
+    .p-inputtext, .p-select, .p-autocomplete, .p-inputnumber {
       &:hover {
         border-color: var(--primary-color);
       }
@@ -92,8 +96,8 @@
       }
     }
     
-    .p-dropdown {
-      .p-dropdown-label {
+    .p-select, .p-autocomplete {
+      .p-select-label, .p-autocomplete-input {
         padding: 0.5rem 0.75rem;
       }
     }

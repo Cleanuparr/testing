@@ -12,6 +12,7 @@ import {
 } from "../../shared/models/download-cleaner-config.model";
 import { ScheduleUnit, ScheduleOptions } from "../../shared/models/queue-cleaner-config.model";
 import { MobileAutocompleteComponent } from "../../shared/components/mobile-autocomplete/mobile-autocomplete.component";
+import { hasIndividuallyDirtyFormErrors } from "../../core/utils/form-validation.util";
 
 // PrimeNG Components
 import { CardModule } from "primeng/card";
@@ -21,11 +22,9 @@ import { ButtonModule } from "primeng/button";
 import { InputNumberModule } from "primeng/inputnumber";
 import { AccordionModule } from "primeng/accordion";
 import { SelectButtonModule } from "primeng/selectbutton";
-import { ChipsModule } from "primeng/chips";
 import { ToastModule } from "primeng/toast";
 import { NotificationService } from "../../core/services/notification.service";
 import { SelectModule } from "primeng/select";
-import { AutoCompleteModule } from "primeng/autocomplete";
 import { DropdownModule } from "primeng/dropdown";
 import { TableModule } from "primeng/table";
 import { LoadingErrorStateComponent } from "../../shared/components/loading-error-state/loading-error-state.component";
@@ -47,10 +46,8 @@ import { DocumentationService } from "../../core/services/documentation.service"
     InputNumberModule,
     AccordionModule,
     SelectButtonModule,
-    ChipsModule,
     ToastModule,
     SelectModule,
-    AutoCompleteModule,
     DropdownModule,
     TableModule,
     LoadingErrorStateComponent,
@@ -58,7 +55,7 @@ import { DocumentationService } from "../../core/services/documentation.service"
     NgIf,
     MobileAutocompleteComponent,
   ],
-  providers: [ConfirmationService],
+  providers: [ConfirmationService, DownloadCleanerConfigStore],
   templateUrl: "./download-cleaner-settings.component.html",
   styleUrls: ["./download-cleaner-settings.component.scss"],
 })
@@ -89,12 +86,12 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   
   // Track the previous enabled state to detect when user is trying to enable
   private previousEnabledState = false;
-  
+
+  // Track the previous unlinked enabled state to detect when user is trying to enable
+  private previousUnlinkedEnabledState = false;
+
   // Flag to track if form has been initially loaded to avoid showing dialog on page load
   private formInitialized = false;
-  
-  // Minimal autocomplete support - empty suggestions to allow manual input
-  unlinkedCategoriesSuggestions: string[] = [];
   
   // Get the categories form array for easier access in the template
   get categoriesFormArray(): FormArray {
@@ -148,13 +145,14 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
         type: [{ value: ScheduleUnit.Minutes, disabled: true }, [Validators.required]]
       }),
       categories: this.formBuilder.array([]),
+      ignoredDownloads: [{ value: [], disabled: true }],
       deletePrivate: [{ value: false, disabled: true }],
       unlinkedEnabled: [{ value: false, disabled: true }],
       unlinkedTargetCategory: [{ value: 'cleanuparr-unlinked', disabled: true }, [Validators.required]],
       unlinkedUseTag: [{ value: false, disabled: true }],
       unlinkedIgnoredRootDir: [{ value: '', disabled: true }],
       unlinkedCategories: [{ value: [], disabled: true }]
-    }, { validators: this.validateUnlinkedCategories });
+    }, { validators: [this.validateUnlinkedCategories, this.validateAtLeastOneFeature] });
 
     // Load the current configuration
     effect(() => {
@@ -179,15 +177,8 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       if (saveErrorMessage) {
         // Check if this looks like a validation error from the backend
         // These are typically user-fixable errors that should be shown as toasts
-        const isUserFixableError = ErrorHandlerUtil.isUserFixableError(saveErrorMessage);
-        
-        if (isUserFixableError) {
-          // Show validation errors as toast notifications so user can fix them
-          this.notificationService.showError(saveErrorMessage);
-        } else {
-          // For non-user-fixable save errors, also emit to parent
-          this.error.emit(saveErrorMessage);
-        }
+            // Always show save errors as a toast so the user sees the backend message.
+            this.notificationService.showError(saveErrorMessage);
       }
     });
     
@@ -201,9 +192,16 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   addCategory(category: CleanCategory = createDefaultCategory()): void {
     // Create a form group for the category with validation and add it to the form array
     const categoryGroup = this.createCategoryFormGroup(category);
-    
+
     this.categoriesFormArray.push(categoryGroup);
     this.downloadCleanerForm.markAsDirty();
+
+    // Mark all controls in the new category as dirty to trigger validation immediately
+    Object.keys(categoryGroup.controls).forEach(key => {
+      categoryGroup.get(key)?.markAsDirty();
+    });
+    // Also mark the group itself as dirty to trigger group-level validators
+    categoryGroup.markAsDirty();
   }
   
   /**
@@ -212,9 +210,9 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   private createCategoryFormGroup(category: CleanCategory): FormGroup {
     return this.formBuilder.group({
       name: [category.name, Validators.required],
-      maxRatio: [category.maxRatio],
-      minSeedTime: [category.minSeedTime, [Validators.min(0)]],
-      maxSeedTime: [category.maxSeedTime],
+      maxRatio: [category.maxRatio, [Validators.min(-1), Validators.required]],
+      minSeedTime: [category.minSeedTime, [Validators.min(0), Validators.required]],
+      maxSeedTime: [category.maxSeedTime, [Validators.min(-1), Validators.required]],
     }, { validators: this.validateCategory });
   }
   
@@ -236,11 +234,52 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
    * Custom validator for unlinked categories - requires categories when unlinked handling is enabled
    */
   private validateUnlinkedCategories(group: FormGroup): ValidationErrors | null {
-    const unlinkedEnabled = group.get('unlinkedEnabled')?.value;
-    const unlinkedCategories = group.get('unlinkedCategories')?.value;
+    const unlinkedEnabledControl = group.get('unlinkedEnabled');
+    const unlinkedCategoriesControl = group.get('unlinkedCategories');
+
+    // Don't validate if controls don't exist or if unlinkedCategories is disabled
+    if (!unlinkedEnabledControl || !unlinkedCategoriesControl || unlinkedCategoriesControl.disabled) {
+      return null;
+    }
+
+    const unlinkedEnabled = unlinkedEnabledControl.value;
+    const unlinkedCategories = unlinkedCategoriesControl.value;
 
     if (unlinkedEnabled && (!unlinkedCategories || unlinkedCategories.length === 0)) {
       return { unlinkedCategoriesRequired: true };
+    }
+
+    return null;
+  }
+
+  /**
+   * Custom validator to ensure at least one feature is configured when Download Cleaner is enabled
+   */
+  private validateAtLeastOneFeature(group: FormGroup): ValidationErrors | null {
+    const enabled = group.get('enabled')?.value;
+
+    // If not enabled, validation passes
+    if (!enabled) {
+      return null;
+    }
+
+    // Check if seeding categories are configured
+    const categories = group.get('categories')?.value;
+    const hasSeedingCategories = categories && categories.length > 0;
+
+    // Check if unlinked feature is properly configured
+    const unlinkedEnabled = group.get('unlinkedEnabled')?.value;
+    const unlinkedCategories = group.get('unlinkedCategories')?.value;
+    const unlinkedTargetCategory = group.get('unlinkedTargetCategory')?.value;
+    const hasUnlinkedFeature = unlinkedEnabled &&
+                                unlinkedCategories &&
+                                unlinkedCategories.length > 0 &&
+                                unlinkedTargetCategory &&
+                                unlinkedTargetCategory.trim() !== '';
+
+    // At least one feature must be configured
+    if (!hasSeedingCategories && !hasUnlinkedFeature) {
+      return { noFeaturesConfigured: true };
     }
 
     return null;
@@ -297,6 +336,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       useAdvancedScheduling: useAdvanced,
       cronExpression: config.cronExpression,
       deletePrivate: config.deletePrivate,
+      ignoredDownloads: config.ignoredDownloads || [],
       unlinkedEnabled: config.unlinkedEnabled,
       unlinkedTargetCategory: config.unlinkedTargetCategory,
       unlinkedUseTag: config.unlinkedUseTag,
@@ -315,10 +355,11 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
     
     // Store original values for change detection
     this.storeOriginalValues();
-    
+
     // Track the enabled state for confirmation dialog logic
     this.previousEnabledState = config.enabled;
-    
+    this.previousUnlinkedEnabledState = config.unlinkedEnabled;
+
     // Mark form as initialized to enable confirmation dialogs for user actions
     this.formInitialized = true;
     
@@ -393,7 +434,14 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       unlinkedEnabledControl.valueChanges
         .pipe(takeUntil(this.destroy$))
         .subscribe(enabled => {
-          this.updateUnlinkedControlsState(enabled);
+          // Only show confirmation dialog if form is initialized and user is trying to enable
+          if (this.formInitialized && enabled && !this.previousUnlinkedEnabledState) {
+            this.showUnlinkedEnableConfirmationDialog();
+          } else {
+            // Update control states normally
+            this.updateUnlinkedControlsState(enabled);
+            this.previousUnlinkedEnabledState = enabled;
+          }
         });
     }
 
@@ -507,11 +555,13 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       const deletePrivateControl = this.downloadCleanerForm.get('deletePrivate');
       const unlinkedEnabledControl = this.downloadCleanerForm.get('unlinkedEnabled');
       const useAdvancedSchedulingControl = this.downloadCleanerForm.get('useAdvancedScheduling');
+      const ignoredDownloadsControl = this.downloadCleanerForm.get('ignoredDownloads');
       
       categoriesControl?.enable();
       deletePrivateControl?.enable();
       unlinkedEnabledControl?.enable();
       useAdvancedSchedulingControl?.enable();
+      ignoredDownloadsControl?.enable();
       
       // Update unlinked controls based on unlinkedEnabled value
       const unlinkedEnabled = unlinkedEnabledControl?.value;
@@ -527,11 +577,13 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       const deletePrivateControl = this.downloadCleanerForm.get('deletePrivate');
       const unlinkedEnabledControl = this.downloadCleanerForm.get('unlinkedEnabled');
       const useAdvancedSchedulingControl = this.downloadCleanerForm.get('useAdvancedScheduling');
+      const ignoredDownloadsControl = this.downloadCleanerForm.get('ignoredDownloads');
       
       categoriesControl?.disable();
       deletePrivateControl?.disable();
       unlinkedEnabledControl?.disable();
       useAdvancedSchedulingControl?.disable();
+      ignoredDownloadsControl?.disable();
       
       // Always disable unlinked controls when main feature is disabled
       this.updateUnlinkedControlsState(false);
@@ -567,6 +619,7 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
         jobSchedule: formValues.jobSchedule,
         categories: formValues.categories,
         deletePrivate: formValues.deletePrivate,
+        ignoredDownloads: formValues.ignoredDownloads || [],
         unlinkedEnabled: formValues.unlinkedEnabled,
         unlinkedTargetCategory: formValues.unlinkedTargetCategory,
         unlinkedUseTag: formValues.unlinkedUseTag,
@@ -669,6 +722,13 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   hasUnlinkedCategoriesError(): boolean {
     return this.downloadCleanerForm.dirty && this.downloadCleanerForm.hasError('unlinkedCategoriesRequired');
   }
+
+  /**
+   * Check if the form has the no features configured validation error
+   */
+  hasNoFeaturesConfiguredError(): boolean {
+    return this.downloadCleanerForm.dirty && this.downloadCleanerForm.hasError('noFeaturesConfigured');
+  }
   
   /**
    * Get schedule value options based on the current schedule unit type
@@ -754,37 +814,34 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
   }
 
   /**
-   * Simple test method to check unlinkedCategories functionality
-   * Call from browser console: ng.getComponent(document.querySelector('app-download-cleaner-settings')).testUnlinkedCategories()
+   * Check if an accordion section has validation errors
+   * @param sectionIndex The accordion panel index
+   * @returns True if the section has validation errors
    */
-  testUnlinkedCategories(): void {
-    console.log('=== TESTING UNLINKED CATEGORIES ===');
-    
-    const control = this.downloadCleanerForm.get('unlinkedCategories');
-    console.log('Current value:', control?.value);
-    console.log('Control disabled:', control?.disabled);
-    console.log('Control status:', control?.status);
-    
-    // Test setting values
-    console.log('Setting test values: ["movies", "tv-shows"]');
-    control?.setValue(['movies', 'tv-shows']);
-    
-    console.log('Value after setting:', control?.value);
-    
-    // Test what getRawValue returns
-    const rawValues = this.downloadCleanerForm.getRawValue();
-    console.log('getRawValue().unlinkedCategories:', rawValues.unlinkedCategories);
-    
-    console.log('=== END TEST ===');
-  }
-
-  /**
-   * Minimal complete method for autocomplete - just returns empty array to allow manual input
-   */
-  onUnlinkedCategoriesComplete(event: any): void {
-    // Return empty array - this allows users to type any value manually
-    // PrimeNG requires this method even when we don't want suggestions
-    this.unlinkedCategoriesSuggestions = [];
+  sectionHasErrors(sectionIndex: number): boolean {
+    switch (sectionIndex) {
+      case 0: // Seeding Settings
+        const categoriesArray = this.downloadCleanerForm.get('categories') as FormArray;
+        // Check if categories array has errors or if any category has errors
+        if (hasIndividuallyDirtyFormErrors(categoriesArray)) {
+          return true;
+        }
+        // Also check for group-level errors on category form groups (like bothDisabled)
+        for (let i = 0; i < categoriesArray.length; i++) {
+          const categoryGroup = categoriesArray.at(i) as FormGroup;
+          if (categoryGroup.dirty && categoryGroup.errors && Object.keys(categoryGroup.errors).length > 0) {
+            return true;
+          }
+        }
+        return false;
+      case 1: // Unlinked Download Settings
+        return hasIndividuallyDirtyFormErrors(this.downloadCleanerForm.get('unlinkedEnabled')) ||
+               hasIndividuallyDirtyFormErrors(this.downloadCleanerForm.get('unlinkedTargetCategory')) ||
+               hasIndividuallyDirtyFormErrors(this.downloadCleanerForm.get('unlinkedCategories')) ||
+               this.hasUnlinkedCategoriesError();
+      default:
+        return false;
+    }
   }
 
   /**
@@ -815,8 +872,33 @@ export class DownloadCleanerSettingsComponent implements OnDestroy, CanComponent
       }
     });
   }
-  
 
-
-  // Add any other necessary methods here
+  /**
+   * Show confirmation dialog when enabling unlinked download handling
+   */
+  private showUnlinkedEnableConfirmationDialog(): void {
+    this.confirmationService.confirm({
+      header: 'Enable Unlinked Download Handling',
+      message: 'This feature requires your downloads directory to be accessible (and mounted if using Docker).<br/><br/>Are you sure you want to proceed?',
+      icon: 'pi pi-exclamation-triangle',
+      acceptIcon: 'pi pi-check',
+      rejectIcon: 'pi pi-times',
+      acceptLabel: 'Yes, Enable',
+      rejectLabel: 'Cancel',
+      acceptButtonStyleClass: 'p-button-warning',
+      accept: () => {
+        // User confirmed, update control states and track state
+        this.updateUnlinkedControlsState(true);
+        this.previousUnlinkedEnabledState = true;
+      },
+      reject: () => {
+        // User cancelled, revert the checkbox without triggering value change
+        const unlinkedEnabledControl = this.downloadCleanerForm.get('unlinkedEnabled');
+        if (unlinkedEnabledControl) {
+          unlinkedEnabledControl.setValue(false, { emitEvent: false });
+          this.previousUnlinkedEnabledState = false;
+        }
+      }
+    });
+  }
 }

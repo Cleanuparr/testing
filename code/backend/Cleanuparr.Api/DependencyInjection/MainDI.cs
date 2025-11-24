@@ -17,16 +17,17 @@ public static class MainDI
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration) =>
         services
-            .AddLogging(builder => builder.ClearProviders().AddConsole())
             .AddHttpClients(configuration)
             .AddSingleton<MemoryCache>()
             .AddSingleton<IMemoryCache>(serviceProvider => serviceProvider.GetRequiredService<MemoryCache>())
             .AddServices()
             .AddHealthServices()
             .AddQuartzServices(configuration)
-            .AddNotifications(configuration)
+            .AddNotifications()
             .AddMassTransit(config =>
             {
+                config.DisableUsageTelemetry();
+                
                 config.AddConsumer<DownloadRemoverConsumer<SearchItem>>();
                 config.AddConsumer<DownloadRemoverConsumer<SeriesSearchItem>>();
                 config.AddConsumer<DownloadHunterConsumer<SearchItem>>();
@@ -34,7 +35,8 @@ public static class MainDI
                 
                 config.AddConsumer<NotificationConsumer<FailedImportStrikeNotification>>();
                 config.AddConsumer<NotificationConsumer<StalledStrikeNotification>>();
-                config.AddConsumer<NotificationConsumer<SlowStrikeNotification>>();
+                config.AddConsumer<NotificationConsumer<SlowSpeedStrikeNotification>>();
+                config.AddConsumer<NotificationConsumer<SlowTimeStrikeNotification>>();
                 config.AddConsumer<NotificationConsumer<QueueItemDeletedNotification>>();
                 config.AddConsumer<NotificationConsumer<DownloadCleanedNotification>>();
                 config.AddConsumer<NotificationConsumer<CategoryChangedNotification>>();
@@ -43,6 +45,7 @@ public static class MainDI
                 {
                     cfg.ConfigureJsonSerializerOptions(options =>
                     {
+                        options.PropertyNameCaseInsensitive = true;
                         options.Converters.Add(new JsonStringEnumConverter());
                         options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 
@@ -69,7 +72,8 @@ public static class MainDI
                     {
                         e.ConfigureConsumer<NotificationConsumer<FailedImportStrikeNotification>>(context);
                         e.ConfigureConsumer<NotificationConsumer<StalledStrikeNotification>>(context);
-                        e.ConfigureConsumer<NotificationConsumer<SlowStrikeNotification>>(context);
+                        e.ConfigureConsumer<NotificationConsumer<SlowSpeedStrikeNotification>>(context);
+                        e.ConfigureConsumer<NotificationConsumer<SlowTimeStrikeNotification>>(context);
                         e.ConfigureConsumer<NotificationConsumer<QueueItemDeletedNotification>>(context);
                         e.ConfigureConsumer<NotificationConsumer<DownloadCleanedNotification>>(context);
                         e.ConfigureConsumer<NotificationConsumer<CategoryChangedNotification>>(context);

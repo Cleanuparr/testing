@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Extensions;
 using Cleanuparr.Infrastructure.Features.Context;
-using Cleanuparr.Persistence.Models.Configuration.ContentBlocker;
+using Cleanuparr.Persistence.Models.Configuration.MalwareBlocker;
 using Microsoft.Extensions.Logging;
 using QBittorrent.Client;
 
@@ -23,8 +23,6 @@ public partial class QBitService
             _logger.LogDebug("failed to find torrent {hash} in the {name} download client", hash, _downloadClientConfig.Name);
             return result;
         }
-
-        result.Found = true;
         
         IReadOnlyList<TorrentTracker> trackers = await GetTrackersAsync(hash);
         
@@ -48,10 +46,11 @@ public partial class QBitService
                          && boolValue;
 
         result.IsPrivate = isPrivate;
+        result.Found = true;
 
-        var contentBlockerConfig = ContextProvider.Get<ContentBlockerConfig>();
+        var malwareBlockerConfig = ContextProvider.Get<ContentBlockerConfig>();
 
-        if (contentBlockerConfig.IgnorePrivate && isPrivate)
+        if (malwareBlockerConfig.IgnorePrivate && isPrivate)
         {
             // ignore private trackers
             _logger.LogDebug("skip files check | download is private | {name}", download.Name);
@@ -74,6 +73,7 @@ public partial class QBitService
         BlocklistType blocklistType = _blocklistProvider.GetBlocklistType(instanceType);
         ConcurrentBag<string> patterns = _blocklistProvider.GetPatterns(instanceType);
         ConcurrentBag<Regex> regexes = _blocklistProvider.GetRegexes(instanceType);
+        ConcurrentBag<string> malwarePatterns = _blocklistProvider.GetMalwarePatterns();
         
         foreach (TorrentContent file in files)
         {
@@ -85,7 +85,7 @@ public partial class QBitService
 
             totalFiles++;
             
-            if (IsDefinitelyMalware(file.Name))
+            if (malwareBlockerConfig.DeleteKnownMalware && _filenameEvaluator.IsKnownMalware(file.Name, malwarePatterns))
             {
                 _logger.LogInformation("malware file found | {file} | {title}", file.Name, download.Name);
                 result.ShouldRemove = true;

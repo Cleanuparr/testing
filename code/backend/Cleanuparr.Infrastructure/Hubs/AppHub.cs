@@ -1,4 +1,7 @@
 using Cleanuparr.Infrastructure.Logging;
+using Cleanuparr.Infrastructure.Models;
+using Cleanuparr.Infrastructure.Services;
+using Cleanuparr.Infrastructure.Services.Interfaces;
 using Cleanuparr.Persistence;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -11,15 +14,19 @@ namespace Cleanuparr.Infrastructure.Hubs;
 /// </summary>
 public class AppHub : Hub
 {
-    private readonly EventsContext _context;
     private readonly ILogger<AppHub> _logger;
+    private readonly EventsContext _context;
+    private readonly IJobManagementService _jobManagementService;
     private readonly SignalRLogSink _logSink;
+    private readonly AppStatusSnapshot _statusSnapshot;
 
-    public AppHub(EventsContext context, ILogger<AppHub> logger, SignalRLogSink logSink)
+    public AppHub(EventsContext context, ILogger<AppHub> logger, AppStatusSnapshot statusSnapshot, IJobManagementService jobManagementService)
     {
         _context = context;
         _logger = logger;
-        _logSink = logSink;
+        _statusSnapshot = statusSnapshot;
+        _jobManagementService = jobManagementService;
+        _logSink = SignalRLogSink.Instance;
     }
 
     /// <summary>
@@ -35,7 +42,7 @@ public class AppHub : Hub
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send recent logs to client {connectionId}", Context.ConnectionId);
+            _logger.LogError(ex, "Failed to send recent logs to client");
         }
     }
 
@@ -56,7 +63,45 @@ public class AppHub : Hub
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send recent events to client {connectionId}", Context.ConnectionId);
+            _logger.LogError(ex, "Failed to send recent events to client");
+        }
+    }
+
+    /// <summary>
+    /// Client requests recent manual events
+    /// </summary>
+    public async Task GetRecentManualEvents(int count = 100)
+    {
+        try
+        {
+            var manualEvents = await _context.ManualEvents
+                .Where(e => !e.IsResolved)
+                .OrderBy(e => e.Timestamp) // Oldest first
+                .Take(Math.Min(count, 100)) // Cap at 100
+                .ToListAsync();
+
+            await Clients.Caller.SendAsync("ManualEventsReceived", manualEvents);
+            _logger.LogDebug("Sent {count} recent manual events to client {connectionId}", manualEvents.Count, Context.ConnectionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send recent manual events to client");
+        }
+    }
+
+    /// <summary>
+    /// Client requests current job statuses
+    /// </summary>
+    public async Task GetJobStatus()
+    {
+        try
+        {
+            var jobs = await _jobManagementService.GetAllJobs();
+            await Clients.All.SendAsync("JobsStatusUpdate", jobs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send job status to client");
         }
     }
 
@@ -66,6 +111,13 @@ public class AppHub : Hub
     public override async Task OnConnectedAsync()
     {
         _logger.LogTrace("Client connected to AppHub: {ConnectionId}", Context.ConnectionId);
+
+        var status = _statusSnapshot.Current;
+        if (status.CurrentVersion is not null || status.LatestVersion is not null)
+        {
+            await Clients.Caller.SendAsync("AppStatusUpdated", status);
+        }
+
         await base.OnConnectedAsync();
     }
 

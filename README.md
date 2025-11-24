@@ -2,6 +2,11 @@ _Love this project? Give it a ⭐️ and let others know!_
 
 # <img width="24px" src="./Logo/256.png" alt="Cleanuparr"></img> Cleanuparr
 
+![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcleanuparr-status.pages.dev%2Fstatus.json&query=%24.version&logo=git&label=version&color=blue)
+![Total Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FCleanuparr%2FCleanuparr%2Fcleanuparr&query=%24.downloadCount&style=flat&logo=docker&label=Total%20Downloads&color=blue)
+[![Tests](https://github.com/Cleanuparr/Cleanuparr/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Cleanuparr/Cleanuparr/actions/workflows/test.yml)
+
+
 [![Discord](https://img.shields.io/discord/1306721212587573389?color=7289DA&label=Discord&style=for-the-badge&logo=discord)](https://discord.gg/SCtMCgtsc4)
 
 Cleanuparr is a tool for automating the cleanup of unwanted or blocked files in Sonarr, Radarr, and supported download clients like qBittorrent. It removes incomplete or blocked downloads, updates queues, and enforces blacklists or whitelists to manage file selection. After removing blocked content, Cleanuparr can also trigger a search to replace the deleted shows/movies.
@@ -15,12 +20,17 @@ Cleanuparr was created primarily to address malicious files, such as `*.lnk` or 
 > - Remove and block downloads that are **failing to be imported** by the arrs.
 > - Remove and block downloads that are **stalled** or in **metadata downloading** state.
 > - Remove and block downloads that have a **low download speed** or **high estimated completion time**.
-> - Remove and block downloads blocked by qBittorrent or by Cleanuparr's **Content Blocker**.
+> - Remove and block downloads blocked by qBittorrent or by Cleanuparr's **Malware Blocker**.
+> - Remove and block known malware based on patterns found by the community.
 > - Automatically trigger a search for downloads removed from the arrs.
 > - Clean up downloads that have been **seeding** for a certain amount of time.
 > - Remove downloads that are **orphaned**/have no **hardlinks**/are not referenced by the arrs anymore (with [cross-seed](https://www.cross-seed.org/) support).
 > - Notify on strike or download removal.
 > - Ignore certain torrent hashes, categories, tags or trackers from being processed by Cleanuparr.
+
+## Screenshots
+
+https://cleanuparr.github.io/Cleanuparr/docs/screenshots
 
 ## 🎯 Supported Applications
 
@@ -58,7 +68,7 @@ docker run -d --name cleanuparr \
   ghcr.io/cleanuparr/cleanuparr:latest
 ```
 
-For Docker Compose, health checks, and other installation methods, see the [Complete Installation Guide](https://cleanuparr.github.io/Cleanuparr/docs/installation/detailed).
+For Docker Compose, health checks, and other installation methods, see the [Complete Installation Guide](https://cleanuparr.github.io/Cleanuparr/docs/installation/detailed), but not before reading the [Prerequisites](https://cleanuparr.github.io/Cleanuparr/docs/installation/).
 
 ### 🌐 Access the Web Interface
 
@@ -76,6 +86,17 @@ http://localhost:11011
 - **🔧 [Setup Scenarios](https://cleanuparr.github.io/Cleanuparr/docs/category/setup-scenarios)** - Common use cases and examples
 - **💬 [Discord Community](https://discord.gg/SCtMCgtsc4)** - Get help and discuss with other users
 - **🔗 [GitHub Releases](https://github.com/Cleanuparr/Cleanuparr/releases)** - Download binaries and view changelog
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Whether it's bug fixes, new features, documentation improvements, or testing, your help is appreciated.
+
+**Before contributing:** Please read our [Contributing Guide](CONTRIBUTING.md) and announce your intent to work on an issue before starting.
+
+- **[Contributing Guide](CONTRIBUTING.md)** - Learn how to set up your development environment and submit contributions
+- **[Report Issues](https://github.com/Cleanuparr/Cleanuparr/issues/new/choose)** - Found a bug? Let us know!
+- **[Feature Requests](https://github.com/Cleanuparr/Cleanuparr/issues/new/choose)** - Share your ideas for new features
+- **[Help Test Features](https://discord.gg/SCtMCgtsc4)** - Join Discord to test pre-release features and provide feedback
 
 # <img style="vertical-align: middle;" width="24px" src="./Logo/256.png" alt="Cleanuparr"> <span style="vertical-align: middle;">Cleanuparr</span> <img src="https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/x.svg" height="24px" width="30px" style="vertical-align: middle;"> <span style="vertical-align: middle;">Huntarr</span> <img style="vertical-align: middle;" width="24px" src="https://github.com/plexguide/Huntarr.io/blob/main/frontend/static/logo/512.png?raw=true" alt Huntarr></img>
 

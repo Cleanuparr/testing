@@ -2,7 +2,9 @@ import { inject, Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import * as signalR from '@microsoft/signalr';
 import { LogEntry } from '../models/signalr.models';
-import { AppEvent } from '../models/event.models';
+import { AppEvent, ManualEvent } from '../models/event.models';
+import { AppStatus } from '../models/app-status.model';
+import { JobInfo } from '../models/job.models';
 import { ApplicationPathService } from './base-path.service';
 
 /**
@@ -16,10 +18,14 @@ export class AppHubService {
   private connectionStatusSubject = new BehaviorSubject<boolean>(false);
   private logsSubject = new BehaviorSubject<LogEntry[]>([]);
   private eventsSubject = new BehaviorSubject<AppEvent[]>([]);
+  private manualEventsSubject = new BehaviorSubject<ManualEvent[]>([]);
+  private appStatusSubject = new BehaviorSubject<AppStatus | null>(null);
+  private jobsSubject = new BehaviorSubject<JobInfo[]>([]);
   private readonly ApplicationPathService = inject(ApplicationPathService);
-  
+
   private logBuffer: LogEntry[] = [];
   private eventBuffer: AppEvent[] = [];
+  private manualEventBuffer: ManualEvent[] = [];
   private readonly bufferSize = 1000;
 
   constructor() { }
@@ -48,12 +54,10 @@ export class AppHubService {
 
     return this.hubConnection.start()
       .then(() => {
-        console.log('AppHub connection started');
         this.connectionStatusSubject.next(true);
         this.requestInitialData();
       })
       .catch(err => {
-        console.error('Error connecting to AppHub:', err);
         this.connectionStatusSubject.next(false);
         throw err;
       });
@@ -65,19 +69,18 @@ export class AppHubService {
   private registerSignalREvents(): void {
     // Handle connection events
     this.hubConnection.onreconnected(() => {
-      console.log('AppHub reconnected');
       this.connectionStatusSubject.next(true);
       this.requestInitialData();
     });
 
     this.hubConnection.onreconnecting(() => {
-      console.log('AppHub reconnecting...');
       this.connectionStatusSubject.next(false);
+      this.appStatusSubject.next(null);
     });
 
     this.hubConnection.onclose(() => {
-      console.log('AppHub connection closed');
       this.connectionStatusSubject.next(false);
+      this.appStatusSubject.next(null);
     });
 
     // Handle individual log messages
@@ -115,6 +118,58 @@ export class AppHubService {
         this.trimBuffer(this.eventBuffer, this.bufferSize);
       }
     });
+
+    // Handle individual manual event messages
+    this.hubConnection.on('ManualEventReceived', (event: ManualEvent) => {
+      this.addManualEventToBuffer(event);
+      const currentEvents = this.manualEventsSubject.value;
+      this.manualEventsSubject.next([...currentEvents, event]);
+    });
+
+    // Handle bulk manual event messages (initial load)
+    this.hubConnection.on('ManualEventsReceived', (events: ManualEvent[]) => {
+      if (events && events.length > 0) {
+        // Set all manual events at once
+        this.manualEventsSubject.next(events);
+        // Update buffer
+        this.manualEventBuffer = [...events];
+        this.trimBuffer(this.manualEventBuffer, this.bufferSize);
+      }
+    });
+
+    this.hubConnection.on('AppStatusUpdated', (status: AppStatus | null) => {
+      if (!status) {
+        this.appStatusSubject.next(null);
+        return;
+      }
+
+      const normalized: AppStatus = {
+        currentVersion: status.currentVersion ?? null,
+        latestVersion: status.latestVersion ?? null
+      };
+
+      this.appStatusSubject.next(normalized);
+    });
+
+    // Handle job status updates
+    this.hubConnection.on('JobsStatusUpdate', (jobs: JobInfo[]) => {
+      if (jobs) {
+        this.jobsSubject.next(jobs);
+      }
+    });
+
+    this.hubConnection.on('JobStatusUpdate', (job: JobInfo) => {
+      if (job) {
+        const currentJobs = this.jobsSubject.value;
+        const jobIndex = currentJobs.findIndex(j => j.name === job.name);
+        if (jobIndex !== -1) {
+          currentJobs[jobIndex] = job;
+          this.jobsSubject.next([...currentJobs]);
+        } else {
+          this.jobsSubject.next([...currentJobs, job]);
+        }
+      }
+    });
   }
   
   /**
@@ -123,6 +178,8 @@ export class AppHubService {
   private requestInitialData(): void {
     this.requestRecentLogs();
     this.requestRecentEvents();
+    this.requestRecentManualEvents();
+    this.requestJobStatus();
   }
   
   /**
@@ -144,12 +201,22 @@ export class AppHubService {
         .catch(err => console.error('Error requesting recent events:', err));
     }
   }
-  
+
+  /**
+   * Request recent manual events from the server
+   */
+  public requestRecentManualEvents(count: number = 100): void {
+    if (this.isConnected()) {
+      this.hubConnection.invoke('GetRecentManualEvents', count)
+        .catch(err => console.error('Error requesting recent manual events:', err));
+    }
+  }
+
   /**
    * Check if the connection is established
    */
   private isConnected(): boolean {
-    return this.hubConnection && 
+    return this.hubConnection &&
            this.hubConnection.state === signalR.HubConnectionState.Connected;
   }
   
@@ -163,7 +230,6 @@ export class AppHubService {
     
     return this.hubConnection.stop()
       .then(() => {
-        console.log('AppHub connection stopped');
         this.connectionStatusSubject.next(false);
       })
       .catch(err => {
@@ -187,7 +253,15 @@ export class AppHubService {
     this.eventBuffer.push(event);
     this.trimBuffer(this.eventBuffer, this.bufferSize);
   }
-  
+
+  /**
+   * Add a manual event to the buffer
+   */
+  private addManualEventToBuffer(event: ManualEvent): void {
+    this.manualEventBuffer.push(event);
+    this.trimBuffer(this.manualEventBuffer, this.bufferSize);
+  }
+
   /**
    * Trim a buffer to the specified size
    */
@@ -212,6 +286,38 @@ export class AppHubService {
   public getEvents(): Observable<AppEvent[]> {
     return this.eventsSubject.asObservable();
   }
+
+  /**
+   * Get manual events as an observable
+   */
+  public getManualEvents(): Observable<ManualEvent[]> {
+    return this.manualEventsSubject.asObservable();
+  }
+
+  /**
+   * Get jobs as an observable
+   */
+  public getJobs(): Observable<JobInfo[]> {
+    return this.jobsSubject.asObservable();
+  }
+  
+  /**
+   * Get jobs connection status as an observable
+   * For consistency with logs and events connection status
+   */
+  public getJobsConnectionStatus(): Observable<boolean> {
+    return this.connectionStatusSubject.asObservable();
+  }
+  
+  /**
+   * Request job status from the server
+   */
+  public requestJobStatus(): void {
+    if (this.isConnected()) {
+      this.hubConnection.invoke('GetJobStatus')
+        .catch(err => console.error('Error requesting job status:', err));
+    }
+  }
   
   /**
    * Get connection status as an observable
@@ -235,6 +341,10 @@ export class AppHubService {
   public getEventsConnectionStatus(): Observable<boolean> {
     return this.connectionStatusSubject.asObservable();
   }
+
+  public getAppStatus(): Observable<AppStatus | null> {
+    return this.appStatusSubject.asObservable();
+  }
   
   /**
    * Clear events
@@ -243,12 +353,29 @@ export class AppHubService {
     this.eventsSubject.next([]);
     this.eventBuffer = [];
   }
-  
+
+  /**
+   * Clear manual events
+   */
+  public clearManualEvents(): void {
+    this.manualEventsSubject.next([]);
+    this.manualEventBuffer = [];
+  }
+
   /**
    * Clear logs
    */
   public clearLogs(): void {
     this.logsSubject.next([]);
     this.logBuffer = [];
+  }
+
+  /**
+   * Remove a specific manual event from the subject
+   */
+  public removeManualEvent(eventId: string): void {
+    const currentEvents = this.manualEventsSubject.value;
+    const filteredEvents = currentEvents.filter(e => e.id !== eventId);
+    this.manualEventsSubject.next(filteredEvents);
   }
 }

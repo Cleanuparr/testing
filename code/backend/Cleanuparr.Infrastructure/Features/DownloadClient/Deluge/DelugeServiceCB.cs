@@ -4,7 +4,7 @@ using Cleanuparr.Domain.Entities.Deluge.Response;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Infrastructure.Extensions;
 using Cleanuparr.Infrastructure.Features.Context;
-using Cleanuparr.Persistence.Models.Configuration.ContentBlocker;
+using Cleanuparr.Persistence.Models.Configuration.MalwareBlocker;
 using Microsoft.Extensions.Logging;
 
 namespace Cleanuparr.Infrastructure.Features.DownloadClient.Deluge;
@@ -25,6 +25,7 @@ public partial class DelugeService
             return result;
         }
         
+        result.IsPrivate = download.Private;
         result.Found = true;
         
         if (ignoredDownloads.Count > 0 && download.ShouldIgnore(ignoredDownloads))
@@ -32,12 +33,10 @@ public partial class DelugeService
             _logger.LogInformation("skip | download is ignored | {name}", download.Name);
             return result;
         }
-
-        result.IsPrivate = download.Private;
         
-        var contentBlockerConfig = ContextProvider.Get<ContentBlockerConfig>();
+        var malwareBlockerConfig = ContextProvider.Get<ContentBlockerConfig>();
         
-        if (contentBlockerConfig.IgnorePrivate && download.Private)
+        if (malwareBlockerConfig.IgnorePrivate && download.Private)
         {
             // ignore private trackers
             _logger.LogDebug("skip files check | download is private | {name}", download.Name);
@@ -69,6 +68,7 @@ public partial class DelugeService
         BlocklistType blocklistType = _blocklistProvider.GetBlocklistType(instanceType);
         ConcurrentBag<string> patterns = _blocklistProvider.GetPatterns(instanceType);
         ConcurrentBag<Regex> regexes = _blocklistProvider.GetRegexes(instanceType);
+        ConcurrentBag<string> malwarePatterns = _blocklistProvider.GetMalwarePatterns();
 
         ProcessFiles(contents.Contents, (name, file) =>
         {
@@ -80,7 +80,7 @@ public partial class DelugeService
                 return;
             }
             
-            if (IsDefinitelyMalware(name))
+            if (malwareBlockerConfig.DeleteKnownMalware && _filenameEvaluator.IsKnownMalware(name, malwarePatterns))
             {
                 _logger.LogInformation("malware file found | {file} | {title}", file.Path, download.Name);
                 result.ShouldRemove = true;

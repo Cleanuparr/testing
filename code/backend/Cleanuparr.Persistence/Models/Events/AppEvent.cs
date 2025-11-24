@@ -11,7 +11,7 @@ namespace Cleanuparr.Persistence.Models.Events;
 [Index(nameof(EventType))]
 [Index(nameof(Severity))]
 [Index(nameof(Message))]
-public class AppEvent
+public class AppEvent : IEvent
 {
     [Key]
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -25,9 +25,7 @@ public class AppEvent
     [MaxLength(1000)]
     public string Message { get; set; } = string.Empty;
     
-    /// <summary>
-    /// JSON data associated with the event
-    /// </summary>
+    /// <inheritdoc/>
     public string? Data { get; set; }
     
     [Required]

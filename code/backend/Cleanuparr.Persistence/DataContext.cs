@@ -1,15 +1,19 @@
+using Cleanuparr.Domain.Entities;
 using Cleanuparr.Domain.Enums;
 using Cleanuparr.Persistence.Converters;
 using Cleanuparr.Persistence.Models.Configuration;
 using Cleanuparr.Persistence.Models.Configuration.Arr;
-using Cleanuparr.Persistence.Models.Configuration.ContentBlocker;
 using Cleanuparr.Persistence.Models.Configuration.DownloadCleaner;
 using Cleanuparr.Persistence.Models.Configuration.General;
+using Cleanuparr.Persistence.Models.Configuration.MalwareBlocker;
 using Cleanuparr.Persistence.Models.Configuration.Notification;
 using Cleanuparr.Persistence.Models.Configuration.QueueCleaner;
+using Cleanuparr.Persistence.Models.Configuration.BlacklistSync;
+using Cleanuparr.Persistence.Models.State;
 using Cleanuparr.Shared.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Serilog.Events;
 
 namespace Cleanuparr.Persistence;
 
@@ -26,6 +30,10 @@ public class DataContext : DbContext
     
     public DbSet<QueueCleanerConfig> QueueCleanerConfigs { get; set; }
     
+    public DbSet<StallRule> StallRules { get; set; }
+    
+    public DbSet<SlowRule> SlowRules { get; set; }
+    
     public DbSet<ContentBlockerConfig> ContentBlockerConfigs { get; set; }
     
     public DbSet<DownloadCleanerConfig> DownloadCleanerConfigs { get; set; }
@@ -36,31 +44,53 @@ public class DataContext : DbContext
     
     public DbSet<ArrInstance> ArrInstances { get; set; }
     
-    public DbSet<AppriseConfig> AppriseConfigs { get; set; }
+    public DbSet<NotificationConfig> NotificationConfigs { get; set; }
     
     public DbSet<NotifiarrConfig> NotifiarrConfigs { get; set; }
     
+    public DbSet<AppriseConfig> AppriseConfigs { get; set; }
+    
+    public DbSet<NtfyConfig> NtfyConfigs { get; set; }
+
+    public DbSet<BlacklistSyncHistory> BlacklistSyncHistory { get; set; }
+
+    public DbSet<BlacklistSyncConfig> BlacklistSyncConfigs { get; set; }
+
+    public DataContext()
+    {
+    }
+
+    public DataContext(DbContextOptions<DataContext> options) : base(options)
+    {
+    }
+    
+    public static DataContext CreateStaticInstance()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+        SetDbContextOptions(optionsBuilder);
+        return new DataContext(optionsBuilder.Options);
+    }
+    
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        if (optionsBuilder.IsConfigured)
-        {
-            return;
-        }
-        
-        var dbPath = Path.Combine(ConfigurationPathProvider.GetConfigPath(), "cleanuparr.db");
-        optionsBuilder
-            .UseSqlite($"Data Source={dbPath}")
-            .UseLowerCaseNamingConvention()
-            .UseSnakeCaseNamingConvention();
+        SetDbContextOptions(optionsBuilder);
     }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<GeneralConfig>(entity =>
+            entity.ComplexProperty(e => e.Log, cp =>
+            {
+                cp.Property(l => l.Level).HasConversion<LowercaseEnumConverter<LogEventLevel>>();
+            })
+        );
+        
         modelBuilder.Entity<QueueCleanerConfig>(entity =>
         {
-            entity.ComplexProperty(e => e.FailedImport);
-            entity.ComplexProperty(e => e.Stalled);
-            entity.ComplexProperty(e => e.Slow);
+            entity.ComplexProperty(e => e.FailedImport, cp =>
+            {
+                cp.Property(x => x.PatternMode).HasConversion<LowercaseEnumConverter<PatternMode>>();
+            });
         });
         
         modelBuilder.Entity<ContentBlockerConfig>(entity =>
@@ -92,6 +122,42 @@ public class DataContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
         });
         
+        // Configure new notification system relationships
+        modelBuilder.Entity<NotificationConfig>(entity =>
+        {
+            entity.Property(e => e.Type).HasConversion(new LowercaseEnumConverter<NotificationProviderType>());
+
+            entity.HasOne(p => p.NotifiarrConfiguration)
+                  .WithOne(c => c.NotificationConfig)
+                  .HasForeignKey<NotifiarrConfig>(c => c.NotificationConfigId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(p => p.AppriseConfiguration)
+                  .WithOne(c => c.NotificationConfig)
+                  .HasForeignKey<AppriseConfig>(c => c.NotificationConfigId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(p => p.NtfyConfiguration)
+                  .WithOne(c => c.NotificationConfig)
+                  .HasForeignKey<NtfyConfig>(c => c.NotificationConfigId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasIndex(p => p.Name).IsUnique();
+        });
+
+        // Configure BlacklistSyncState relationships and indexes
+        modelBuilder.Entity<BlacklistSyncHistory>(entity =>
+        {
+            // FK to DownloadClientConfig by DownloadClientId with cascade on delete
+            entity.HasOne(s => s.DownloadClient)
+                  .WithMany()
+                  .HasForeignKey(s => s.DownloadClientId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => new { s.Hash, DownloadClientId = s.DownloadClientId }).IsUnique();
+            entity.HasIndex(s => s.Hash);
+        });
+        
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             var enumProperties = entityType.ClrType.GetProperties()
@@ -114,5 +180,19 @@ public class DataContext : DbContext
                     .HasConversion((ValueConverter)converter!);
             }
         }
+    }
+
+    private static void SetDbContextOptions(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (optionsBuilder.IsConfigured)
+        {
+            return;
+        }
+        
+        var dbPath = Path.Combine(ConfigurationPathProvider.GetConfigPath(), "cleanuparr.db");
+        optionsBuilder
+            .UseSqlite($"Data Source={dbPath}")
+            .UseLowerCaseNamingConvention()
+            .UseSnakeCaseNamingConvention();
     }
 } 

@@ -2,7 +2,7 @@ import { HttpClient } from "@angular/common/http";
 import { Injectable, inject } from "@angular/core";
 import { Observable, catchError, map, throwError } from "rxjs";
 import { JobSchedule, QueueCleanerConfig, ScheduleUnit } from "../../shared/models/queue-cleaner-config.model";
-import { ContentBlockerConfig, JobSchedule as ContentBlockerJobSchedule, ScheduleUnit as ContentBlockerScheduleUnit } from "../../shared/models/content-blocker-config.model";
+import { MalwareBlockerConfig as MalwareBlockerConfig, JobSchedule as MalwareBlockerJobSchedule, ScheduleUnit as MalwareBlockerScheduleUnit } from "../../shared/models/malware-blocker-config.model";
 import { SonarrConfig } from "../../shared/models/sonarr-config.model";
 import { RadarrConfig } from "../../shared/models/radarr-config.model";
 import { LidarrConfig } from "../../shared/models/lidarr-config.model";
@@ -11,8 +11,17 @@ import { WhisparrConfig } from "../../shared/models/whisparr-config.model";
 import { ClientConfig, DownloadClientConfig, CreateDownloadClientDto } from "../../shared/models/download-client-config.model";
 import { ArrInstance, CreateArrInstanceDto } from "../../shared/models/arr-config.model";
 import { GeneralConfig } from "../../shared/models/general-config.model";
+import { 
+  StallRule, 
+  SlowRule, 
+  CreateStallRuleDto,
+  UpdateStallRuleDto,
+  CreateSlowRuleDto,
+  UpdateSlowRuleDto
+} from "../../shared/models/queue-rule.model";
 import { ApplicationPathService } from "./base-path.service";
 import { ErrorHandlerUtil } from "../utils/error-handler.util";
+import { BlacklistSyncConfig } from "../../shared/models/blacklist-sync-config.model";
 
 @Injectable({
   providedIn: "root",
@@ -29,6 +38,31 @@ export class ConfigurationService {
       catchError((error) => {
         console.error("Error fetching general config:", error);
         return throwError(() => new Error("Failed to load general configuration"));
+      })
+    );
+  }
+
+  /**
+   * Get Blacklist Sync configuration
+   */
+  getBlacklistSyncConfig(): Observable<BlacklistSyncConfig> {
+    return this.http.get<BlacklistSyncConfig>(this.ApplicationPathService.buildApiUrl('/configuration/blacklist_sync')).pipe(
+      catchError((error) => {
+        console.error("Error fetching Blacklist Sync config:", error);
+        return throwError(() => new Error("Failed to load Blacklist Sync configuration"));
+      })
+    );
+  }
+
+  /**
+   * Update Blacklist Sync configuration
+   */
+  updateBlacklistSyncConfig(config: BlacklistSyncConfig): Observable<any> {
+    return this.http.put<any>(this.ApplicationPathService.buildApiUrl('/configuration/blacklist_sync'), config).pipe(
+      catchError((error) => {
+        console.error("Error updating Blacklist Sync config:", error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }
@@ -81,15 +115,15 @@ export class ConfigurationService {
   /**
    * Get content blocker configuration
    */
-  getContentBlockerConfig(): Observable<ContentBlockerConfig> {
-    return this.http.get<ContentBlockerConfig>(this.ApplicationPathService.buildApiUrl('/configuration/content_blocker')).pipe(
+  getMalwareBlockerConfig(): Observable<MalwareBlockerConfig> {
+    return this.http.get<MalwareBlockerConfig>(this.ApplicationPathService.buildApiUrl('/configuration/malware_blocker')).pipe(
       map((response) => {
-        response.jobSchedule = this.tryExtractContentBlockerJobScheduleFromCron(response.cronExpression);
+        response.jobSchedule = this.tryExtractMalwareBlockerJobScheduleFromCron(response.cronExpression);
         return response;
       }),
       catchError((error) => {
-        console.error("Error fetching content blocker config:", error);
-        return throwError(() => new Error("Failed to load content blocker configuration"));
+        console.error("Error fetching Malware Blocker config:", error);
+        return throwError(() => new Error("Failed to load Malware Blocker configuration"));
       })
     );
   }
@@ -97,14 +131,14 @@ export class ConfigurationService {
   /**
    * Update content blocker configuration
    */
-  updateContentBlockerConfig(config: ContentBlockerConfig): Observable<void> {
+  updateMalwareBlockerConfig(config: MalwareBlockerConfig): Observable<void> {
     // Generate cron expression if using basic scheduling
     if (!config.useAdvancedScheduling && config.jobSchedule) {
-      config.cronExpression = this.convertContentBlockerJobScheduleToCron(config.jobSchedule);
+      config.cronExpression = this.convertMalwareBlockerJobScheduleToCron(config.jobSchedule);
     }
-    return this.http.put<void>(this.ApplicationPathService.buildApiUrl('/configuration/content_blocker'), config).pipe(
+    return this.http.put<void>(this.ApplicationPathService.buildApiUrl('/configuration/malware_blocker'), config).pipe(
       catchError((error) => {
-        console.error("Error updating content blocker config:", error);
+        console.error("Error updating Malware Blocker config:", error);
         const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
         return throwError(() => new Error(errorMessage));
       })
@@ -188,10 +222,10 @@ export class ConfigurationService {
   }
 
   /**
-   * Try to extract a ContentBlockerJobSchedule from a cron expression
+   * Try to extract a MalwareBlockerJobSchedule from a cron expression
    * Only handles the simple cases we're generating
    */
-  private tryExtractContentBlockerJobScheduleFromCron(cronExpression: string): ContentBlockerJobSchedule | undefined {
+  private tryExtractMalwareBlockerJobScheduleFromCron(cronExpression: string): MalwareBlockerJobSchedule | undefined {
     // Patterns we support:
     // Seconds: */n * * ? * * * or 0/n * * ? * * * (Quartz.NET format)
     // Minutes: 0 */n * ? * * * or 0 0/n * ? * * * (Quartz.NET format)
@@ -205,7 +239,7 @@ export class ConfigurationService {
       if ((parts[0].startsWith("*/") || parts[0].startsWith("0/")) && parts[1] === "*") {
         const seconds = parseInt(parts[0].substring(2));
         if (!isNaN(seconds) && seconds > 0 && seconds < 60) {
-          return { every: seconds, type: ContentBlockerScheduleUnit.Seconds };
+          return { every: seconds, type: MalwareBlockerScheduleUnit.Seconds };
         }
       }
 
@@ -213,7 +247,7 @@ export class ConfigurationService {
       if (parts[0] === "0" && (parts[1].startsWith("*/") || parts[1].startsWith("0/"))) {
         const minutes = parseInt(parts[1].substring(2));
         if (!isNaN(minutes) && minutes > 0 && minutes < 60) {
-          return { every: minutes, type: ContentBlockerScheduleUnit.Minutes };
+          return { every: minutes, type: MalwareBlockerScheduleUnit.Minutes };
         }
       }
 
@@ -221,7 +255,7 @@ export class ConfigurationService {
       if (parts[0] === "0" && parts[1] === "0" && (parts[2].startsWith("*/") || parts[2].startsWith("0/"))) {
         const hours = parseInt(parts[2].substring(2));
         if (!isNaN(hours) && hours > 0 && hours < 24) {
-          return { every: hours, type: ContentBlockerScheduleUnit.Hours };
+          return { every: hours, type: MalwareBlockerScheduleUnit.Hours };
         }
       }
     } catch (e) {
@@ -232,27 +266,27 @@ export class ConfigurationService {
   }
 
   /**
-   * Convert a ContentBlockerJobSchedule to a cron expression
+   * Convert a MalwareBlockerJobSchedule to a cron expression
    */
-  private convertContentBlockerJobScheduleToCron(schedule: ContentBlockerJobSchedule): string {
+  private convertMalwareBlockerJobScheduleToCron(schedule: MalwareBlockerJobSchedule): string {
     if (!schedule || schedule.every <= 0) {
       return "0/5 * * * * ?"; // Default: every 5 seconds (Quartz.NET format)
     }
 
     switch (schedule.type) {
-      case ContentBlockerScheduleUnit.Seconds:
+      case MalwareBlockerScheduleUnit.Seconds:
         if (schedule.every < 60) {
           return `0/${schedule.every} * * ? * * *`; // Quartz.NET format
         }
         break;
 
-      case ContentBlockerScheduleUnit.Minutes:
+      case MalwareBlockerScheduleUnit.Minutes:
         if (schedule.every < 60) {
           return `0 0/${schedule.every} * ? * * *`; // Quartz.NET format
         }
         break;
 
-      case ContentBlockerScheduleUnit.Hours:
+      case MalwareBlockerScheduleUnit.Hours:
         if (schedule.every < 24) {
           return `0 0 0/${schedule.every} ? * * *`; // Quartz.NET format
         }
@@ -624,6 +658,110 @@ export class ConfigurationService {
       catchError((error) => {
         console.error(`Error deleting Whisparr instance with ID ${id}:`, error);
         return throwError(() => new Error(error.error?.error || `Failed to delete Whisparr instance with ID ${id}`));
+      })
+    );
+  }
+
+  // ===== QUEUE RULES MANAGEMENT =====
+
+  /**
+   * Get all stall rules
+   */
+  getStallRules(): Observable<StallRule[]> {
+    return this.http.get<StallRule[]>(this.ApplicationPathService.buildApiUrl('/queue-rules/stall')).pipe(
+      catchError((error) => {
+        console.error('Error fetching stall rules:', error);
+        return throwError(() => new Error("Failed to load stall rules"));
+      })
+    );
+  }
+
+  /**
+   * Create a new stall rule
+   */
+  createStallRule(rule: CreateStallRuleDto): Observable<StallRule> {
+    return this.http.post<StallRule>(this.ApplicationPathService.buildApiUrl('/queue-rules/stall'), rule).pipe(
+      catchError((error) => {
+        console.error('Error creating stall rule:', error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Update an existing stall rule
+   */
+  updateStallRule(id: string, rule: UpdateStallRuleDto): Observable<StallRule> {
+    return this.http.put<StallRule>(this.ApplicationPathService.buildApiUrl(`/queue-rules/stall/${id}`), rule).pipe(
+      catchError((error) => {
+        console.error(`Error updating stall rule ${id}:`, error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Delete a stall rule
+   */
+  deleteStallRule(id: string): Observable<void> {
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/queue-rules/stall/${id}`)).pipe(
+      catchError((error) => {
+        console.error(`Error deleting stall rule ${id}:`, error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Get all slow rules
+   */
+  getSlowRules(): Observable<SlowRule[]> {
+    return this.http.get<SlowRule[]>(this.ApplicationPathService.buildApiUrl('/queue-rules/slow')).pipe(
+      catchError((error) => {
+        console.error('Error fetching slow rules:', error);
+        return throwError(() => new Error("Failed to load slow rules"));
+      })
+    );
+  }
+
+  /**
+   * Create a new slow rule
+   */
+  createSlowRule(rule: CreateSlowRuleDto): Observable<SlowRule> {
+    return this.http.post<SlowRule>(this.ApplicationPathService.buildApiUrl('/queue-rules/slow'), rule).pipe(
+      catchError((error) => {
+        console.error('Error creating slow rule:', error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Update an existing slow rule
+   */
+  updateSlowRule(id: string, rule: UpdateSlowRuleDto): Observable<SlowRule> {
+    return this.http.put<SlowRule>(this.ApplicationPathService.buildApiUrl(`/queue-rules/slow/${id}`), rule).pipe(
+      catchError((error) => {
+        console.error(`Error updating slow rule ${id}:`, error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
+      })
+    );
+  }
+
+  /**
+   * Delete a slow rule
+   */
+  deleteSlowRule(id: string): Observable<void> {
+    return this.http.delete<void>(this.ApplicationPathService.buildApiUrl(`/queue-rules/slow/${id}`)).pipe(
+      catchError((error) => {
+        console.error(`Error deleting slow rule ${id}:`, error);
+        const errorMessage = ErrorHandlerUtil.extractErrorMessage(error);
+        return throwError(() => new Error(errorMessage));
       })
     );
   }

@@ -79,127 +79,30 @@ namespace Cleanuparr.Persistence.Migrations.Data
                     b.ToTable("arr_instances", (string)null);
                 });
 
-            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig", b =>
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.BlacklistSync.BlacklistSyncConfig", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
+                    b.Property<string>("BlacklistPath")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("blacklist_path");
+
                     b.Property<string>("CronExpression")
                         .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("cron_expression");
 
-                    b.Property<bool>("DeletePrivate")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("delete_private");
-
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
 
-                    b.Property<bool>("IgnorePrivate")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("ignore_private");
-
-                    b.Property<bool>("UseAdvancedScheduling")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("use_advanced_scheduling");
-
-                    b.ComplexProperty<Dictionary<string, object>>("Lidarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Lidarr#BlocklistSettings", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<string>("BlocklistPath")
-                                .HasColumnType("TEXT")
-                                .HasColumnName("lidarr_blocklist_path");
-
-                            b1.Property<string>("BlocklistType")
-                                .IsRequired()
-                                .HasColumnType("TEXT")
-                                .HasColumnName("lidarr_blocklist_type");
-
-                            b1.Property<bool>("Enabled")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("lidarr_enabled");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("Radarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Radarr#BlocklistSettings", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<string>("BlocklistPath")
-                                .HasColumnType("TEXT")
-                                .HasColumnName("radarr_blocklist_path");
-
-                            b1.Property<string>("BlocklistType")
-                                .IsRequired()
-                                .HasColumnType("TEXT")
-                                .HasColumnName("radarr_blocklist_type");
-
-                            b1.Property<bool>("Enabled")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("radarr_enabled");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("Readarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Readarr#BlocklistSettings", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<string>("BlocklistPath")
-                                .HasColumnType("TEXT")
-                                .HasColumnName("readarr_blocklist_path");
-
-                            b1.Property<string>("BlocklistType")
-                                .IsRequired()
-                                .HasColumnType("TEXT")
-                                .HasColumnName("readarr_blocklist_type");
-
-                            b1.Property<bool>("Enabled")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("readarr_enabled");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("Sonarr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Sonarr#BlocklistSettings", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<string>("BlocklistPath")
-                                .HasColumnType("TEXT")
-                                .HasColumnName("sonarr_blocklist_path");
-
-                            b1.Property<string>("BlocklistType")
-                                .IsRequired()
-                                .HasColumnType("TEXT")
-                                .HasColumnName("sonarr_blocklist_type");
-
-                            b1.Property<bool>("Enabled")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("sonarr_enabled");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("Whisparr", "Cleanuparr.Persistence.Models.Configuration.ContentBlocker.ContentBlockerConfig.Whisparr#BlocklistSettings", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<string>("BlocklistPath")
-                                .HasColumnType("TEXT")
-                                .HasColumnName("whisparr_blocklist_path");
-
-                            b1.Property<int>("BlocklistType")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("whisparr_blocklist_type");
-
-                            b1.Property<bool>("Enabled")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("whisparr_enabled");
-                        });
-
                     b.HasKey("Id")
-                        .HasName("pk_content_blocker_configs");
+                        .HasName("pk_blacklist_sync_configs");
 
-                    b.ToTable("content_blocker_configs", (string)null);
+                    b.ToTable("blacklist_sync_configs", (string)null);
                 });
 
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.DownloadCleaner.CleanCategory", b =>
@@ -258,6 +161,11 @@ namespace Cleanuparr.Persistence.Migrations.Data
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
+
+                    b.PrimitiveCollection<string>("IgnoredDownloads")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ignored_downloads");
 
                     b.PrimitiveCollection<string>("UnlinkedCategories")
                         .IsRequired()
@@ -378,11 +286,6 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("TEXT")
                         .HasColumnName("ignored_downloads");
 
-                    b.Property<string>("LogLevel")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("log_level");
-
                     b.Property<ushort>("SearchDelay")
                         .HasColumnType("INTEGER")
                         .HasColumnName("search_delay");
@@ -391,10 +294,176 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("INTEGER")
                         .HasColumnName("search_enabled");
 
+                    b.ComplexProperty<Dictionary<string, object>>("Log", "Cleanuparr.Persistence.Models.Configuration.General.GeneralConfig.Log#LoggingConfig", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<bool>("ArchiveEnabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_archive_enabled");
+
+                            b1.Property<ushort>("ArchiveRetainedCount")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_archive_retained_count");
+
+                            b1.Property<ushort>("ArchiveTimeLimitHours")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_archive_time_limit_hours");
+
+                            b1.Property<string>("Level")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("log_level");
+
+                            b1.Property<ushort>("RetainedFileCount")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_retained_file_count");
+
+                            b1.Property<ushort>("RollingSizeMB")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_rolling_size_mb");
+
+                            b1.Property<ushort>("TimeLimitHours")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("log_time_limit_hours");
+                        });
+
                     b.HasKey("Id")
                         .HasName("pk_general_configs");
 
                     b.ToTable("general_configs", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CronExpression")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cron_expression");
+
+                    b.Property<bool>("DeleteKnownMalware")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("delete_known_malware");
+
+                    b.Property<bool>("DeletePrivate")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("delete_private");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<bool>("IgnorePrivate")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("ignore_private");
+
+                    b.PrimitiveCollection<string>("IgnoredDownloads")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ignored_downloads");
+
+                    b.Property<bool>("UseAdvancedScheduling")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("use_advanced_scheduling");
+
+                    b.ComplexProperty<Dictionary<string, object>>("Lidarr", "Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig.Lidarr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("lidarr_blocklist_path");
+
+                            b1.Property<string>("BlocklistType")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("lidarr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("lidarr_enabled");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Radarr", "Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig.Radarr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("radarr_blocklist_path");
+
+                            b1.Property<string>("BlocklistType")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("radarr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("radarr_enabled");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Readarr", "Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig.Readarr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("readarr_blocklist_path");
+
+                            b1.Property<string>("BlocklistType")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("readarr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("readarr_enabled");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Sonarr", "Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig.Sonarr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("sonarr_blocklist_path");
+
+                            b1.Property<string>("BlocklistType")
+                                .IsRequired()
+                                .HasColumnType("TEXT")
+                                .HasColumnName("sonarr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("sonarr_enabled");
+                        });
+
+                    b.ComplexProperty<Dictionary<string, object>>("Whisparr", "Cleanuparr.Persistence.Models.Configuration.MalwareBlocker.ContentBlockerConfig.Whisparr#BlocklistSettings", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("BlocklistPath")
+                                .HasColumnType("TEXT")
+                                .HasColumnName("whisparr_blocklist_path");
+
+                            b1.Property<int>("BlocklistType")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("whisparr_blocklist_type");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("INTEGER")
+                                .HasColumnName("whisparr_enabled");
+                        });
+
+                    b.HasKey("Id")
+                        .HasName("pk_content_blocker_configs");
+
+                    b.ToTable("content_blocker_configs", (string)null);
                 });
 
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.AppriseConfig", b =>
@@ -404,44 +473,33 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<string>("FullUrl")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("full_url");
-
                     b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(255)
                         .HasColumnType("TEXT")
                         .HasColumnName("key");
 
-                    b.Property<bool>("OnCategoryChanged")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_category_changed");
-
-                    b.Property<bool>("OnDownloadCleaned")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_download_cleaned");
-
-                    b.Property<bool>("OnFailedImportStrike")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_failed_import_strike");
-
-                    b.Property<bool>("OnQueueItemDeleted")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_queue_item_deleted");
-
-                    b.Property<bool>("OnSlowStrike")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_slow_strike");
-
-                    b.Property<bool>("OnStalledStrike")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("on_stalled_strike");
+                    b.Property<Guid>("NotificationConfigId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_config_id");
 
                     b.Property<string>("Tags")
+                        .HasMaxLength(255)
                         .HasColumnType("TEXT")
                         .HasColumnName("tags");
 
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("url");
+
                     b.HasKey("Id")
                         .HasName("pk_apprise_configs");
+
+                    b.HasIndex("NotificationConfigId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_apprise_configs_notification_config_id");
 
                     b.ToTable("apprise_configs", (string)null);
                 });
@@ -454,12 +512,51 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnName("id");
 
                     b.Property<string>("ApiKey")
+                        .IsRequired()
+                        .HasMaxLength(255)
                         .HasColumnType("TEXT")
                         .HasColumnName("api_key");
 
                     b.Property<string>("ChannelId")
+                        .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("TEXT")
                         .HasColumnName("channel_id");
+
+                    b.Property<Guid>("NotificationConfigId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_config_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notifiarr_configs");
+
+                    b.HasIndex("NotificationConfigId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notifiarr_configs_notification_config_id");
+
+                    b.ToTable("notifiarr_configs", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.NotificationConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<bool>("OnCategoryChanged")
                         .HasColumnType("INTEGER")
@@ -485,10 +582,85 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("INTEGER")
                         .HasColumnName("on_stalled_strike");
 
-                    b.HasKey("Id")
-                        .HasName("pk_notifiarr_configs");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("type");
 
-                    b.ToTable("notifiarr_configs", (string)null);
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_configs");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notification_configs_name");
+
+                    b.ToTable("notification_configs", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.NtfyConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccessToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("access_token");
+
+                    b.Property<string>("AuthenticationType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("authentication_type");
+
+                    b.Property<Guid>("NotificationConfigId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_config_id");
+
+                    b.Property<string>("Password")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("password");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("priority");
+
+                    b.Property<string>("ServerUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("server_url");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tags");
+
+                    b.PrimitiveCollection<string>("Topics")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("topics");
+
+                    b.Property<string>("Username")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("username");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ntfy_configs");
+
+                    b.HasIndex("NotificationConfigId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ntfy_configs_notification_config_id");
+
+                    b.ToTable("ntfy_configs", (string)null);
                 });
 
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig", b =>
@@ -503,9 +675,18 @@ namespace Cleanuparr.Persistence.Migrations.Data
                         .HasColumnType("TEXT")
                         .HasColumnName("cron_expression");
 
+                    b.Property<ushort>("DownloadingMetadataMaxStrikes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("downloading_metadata_max_strikes");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
+
+                    b.PrimitiveCollection<string>("IgnoredDownloads")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ignored_downloads");
 
                     b.Property<bool>("UseAdvancedScheduling")
                         .HasColumnType("INTEGER")
@@ -523,80 +704,186 @@ namespace Cleanuparr.Persistence.Migrations.Data
                                 .HasColumnType("INTEGER")
                                 .HasColumnName("failed_import_ignore_private");
 
-                            b1.PrimitiveCollection<string>("IgnoredPatterns")
-                                .IsRequired()
-                                .HasColumnType("TEXT")
-                                .HasColumnName("failed_import_ignored_patterns");
-
                             b1.Property<ushort>("MaxStrikes")
                                 .HasColumnType("INTEGER")
                                 .HasColumnName("failed_import_max_strikes");
-                        });
 
-                    b.ComplexProperty<Dictionary<string, object>>("Slow", "Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig.Slow#SlowConfig", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<bool>("DeletePrivate")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("slow_delete_private");
-
-                            b1.Property<string>("IgnoreAboveSize")
+                            b1.Property<string>("PatternMode")
                                 .IsRequired()
                                 .HasColumnType("TEXT")
-                                .HasColumnName("slow_ignore_above_size");
+                                .HasColumnName("failed_import_pattern_mode");
 
-                            b1.Property<bool>("IgnorePrivate")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("slow_ignore_private");
-
-                            b1.Property<ushort>("MaxStrikes")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("slow_max_strikes");
-
-                            b1.Property<double>("MaxTime")
-                                .HasColumnType("REAL")
-                                .HasColumnName("slow_max_time");
-
-                            b1.Property<string>("MinSpeed")
+                            b1.PrimitiveCollection<string>("Patterns")
                                 .IsRequired()
                                 .HasColumnType("TEXT")
-                                .HasColumnName("slow_min_speed");
+                                .HasColumnName("failed_import_patterns");
 
-                            b1.Property<bool>("ResetStrikesOnProgress")
+                            b1.Property<bool>("SkipIfNotFoundInClient")
                                 .HasColumnType("INTEGER")
-                                .HasColumnName("slow_reset_strikes_on_progress");
-                        });
-
-                    b.ComplexProperty<Dictionary<string, object>>("Stalled", "Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig.Stalled#StalledConfig", b1 =>
-                        {
-                            b1.IsRequired();
-
-                            b1.Property<bool>("DeletePrivate")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("stalled_delete_private");
-
-                            b1.Property<ushort>("DownloadingMetadataMaxStrikes")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("stalled_downloading_metadata_max_strikes");
-
-                            b1.Property<bool>("IgnorePrivate")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("stalled_ignore_private");
-
-                            b1.Property<ushort>("MaxStrikes")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("stalled_max_strikes");
-
-                            b1.Property<bool>("ResetStrikesOnProgress")
-                                .HasColumnType("INTEGER")
-                                .HasColumnName("stalled_reset_strikes_on_progress");
+                                .HasColumnName("failed_import_skip_if_not_found_in_client");
                         });
 
                     b.HasKey("Id")
                         .HasName("pk_queue_cleaner_configs");
 
                     b.ToTable("queue_cleaner_configs", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.SlowRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("DeletePrivateTorrentsFromClient")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("delete_private_torrents_from_client");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("IgnoreAboveSize")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ignore_above_size");
+
+                    b.Property<ushort>("MaxCompletionPercentage")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_completion_percentage");
+
+                    b.Property<int>("MaxStrikes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_strikes");
+
+                    b.Property<double>("MaxTimeHours")
+                        .HasColumnType("REAL")
+                        .HasColumnName("max_time_hours");
+
+                    b.Property<ushort>("MinCompletionPercentage")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("min_completion_percentage");
+
+                    b.Property<string>("MinSpeed")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("min_speed");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PrivacyType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("privacy_type");
+
+                    b.Property<Guid>("QueueCleanerConfigId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("queue_cleaner_config_id");
+
+                    b.Property<bool>("ResetStrikesOnProgress")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("reset_strikes_on_progress");
+
+                    b.HasKey("Id")
+                        .HasName("pk_slow_rules");
+
+                    b.HasIndex("QueueCleanerConfigId")
+                        .HasDatabaseName("ix_slow_rules_queue_cleaner_config_id");
+
+                    b.ToTable("slow_rules", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.StallRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("DeletePrivateTorrentsFromClient")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("delete_private_torrents_from_client");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<ushort>("MaxCompletionPercentage")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_completion_percentage");
+
+                    b.Property<int>("MaxStrikes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_strikes");
+
+                    b.Property<ushort>("MinCompletionPercentage")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("min_completion_percentage");
+
+                    b.Property<string>("MinimumProgress")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("minimum_progress");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PrivacyType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("privacy_type");
+
+                    b.Property<Guid>("QueueCleanerConfigId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("queue_cleaner_config_id");
+
+                    b.Property<bool>("ResetStrikesOnProgress")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("reset_strikes_on_progress");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stall_rules");
+
+                    b.HasIndex("QueueCleanerConfigId")
+                        .HasDatabaseName("ix_stall_rules_queue_cleaner_config_id");
+
+                    b.ToTable("stall_rules", (string)null);
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.State.BlacklistSyncHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("DownloadClientId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("download_client_id");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_blacklist_sync_history");
+
+                    b.HasIndex("DownloadClientId")
+                        .HasDatabaseName("ix_blacklist_sync_history_download_client_id");
+
+                    b.HasIndex("Hash")
+                        .HasDatabaseName("ix_blacklist_sync_history_hash");
+
+                    b.HasIndex("Hash", "DownloadClientId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_blacklist_sync_history_hash_download_client_id");
+
+                    b.ToTable("blacklist_sync_history", (string)null);
                 });
 
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Arr.ArrInstance", b =>
@@ -623,6 +910,78 @@ namespace Cleanuparr.Persistence.Migrations.Data
                     b.Navigation("DownloadCleanerConfig");
                 });
 
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.AppriseConfig", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.Notification.NotificationConfig", "NotificationConfig")
+                        .WithOne("AppriseConfiguration")
+                        .HasForeignKey("Cleanuparr.Persistence.Models.Configuration.Notification.AppriseConfig", "NotificationConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_apprise_configs_notification_configs_notification_config_id");
+
+                    b.Navigation("NotificationConfig");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.NotifiarrConfig", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.Notification.NotificationConfig", "NotificationConfig")
+                        .WithOne("NotifiarrConfiguration")
+                        .HasForeignKey("Cleanuparr.Persistence.Models.Configuration.Notification.NotifiarrConfig", "NotificationConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notifiarr_configs_notification_configs_notification_config_id");
+
+                    b.Navigation("NotificationConfig");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.NtfyConfig", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.Notification.NotificationConfig", "NotificationConfig")
+                        .WithOne("NtfyConfiguration")
+                        .HasForeignKey("Cleanuparr.Persistence.Models.Configuration.Notification.NtfyConfig", "NotificationConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ntfy_configs_notification_configs_notification_config_id");
+
+                    b.Navigation("NotificationConfig");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.SlowRule", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig", "QueueCleanerConfig")
+                        .WithMany("SlowRules")
+                        .HasForeignKey("QueueCleanerConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_slow_rules_queue_cleaner_configs_queue_cleaner_config_id");
+
+                    b.Navigation("QueueCleanerConfig");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.StallRule", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig", "QueueCleanerConfig")
+                        .WithMany("StallRules")
+                        .HasForeignKey("QueueCleanerConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stall_rules_queue_cleaner_configs_queue_cleaner_config_id");
+
+                    b.Navigation("QueueCleanerConfig");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.State.BlacklistSyncHistory", b =>
+                {
+                    b.HasOne("Cleanuparr.Persistence.Models.Configuration.DownloadClientConfig", "DownloadClient")
+                        .WithMany()
+                        .HasForeignKey("DownloadClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_blacklist_sync_history_download_clients_download_client_id");
+
+                    b.Navigation("DownloadClient");
+                });
+
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Arr.ArrConfig", b =>
                 {
                     b.Navigation("Instances");
@@ -631,6 +990,22 @@ namespace Cleanuparr.Persistence.Migrations.Data
             modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.DownloadCleaner.DownloadCleanerConfig", b =>
                 {
                     b.Navigation("Categories");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.Notification.NotificationConfig", b =>
+                {
+                    b.Navigation("AppriseConfiguration");
+
+                    b.Navigation("NotifiarrConfiguration");
+
+                    b.Navigation("NtfyConfiguration");
+                });
+
+            modelBuilder.Entity("Cleanuparr.Persistence.Models.Configuration.QueueCleaner.QueueCleanerConfig", b =>
+                {
+                    b.Navigation("SlowRules");
+
+                    b.Navigation("StallRules");
                 });
 #pragma warning restore 612, 618
         }

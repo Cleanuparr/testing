@@ -8,13 +8,20 @@ body:
       value: |
         Thanks for taking the time to improve Cleanuparr!
   - type: checkboxes
+    id: duplicate-check
+    attributes:
+      label: "Duplicate check"
+      options:
+        - label: I have searched for existing issues and confirmed this is not a duplicate.
+          required: true
+  - type: checkboxes
     id: init
     attributes:
       label: "Before submitting a bug report, I have:"
       options:
         - label: Reviewed the documentation.
           required: true
-        - label: Ensured I am using ghcr.io/cleanuparr/cleanuparr docker repository.
+        - label: Ensured I am using ghcr.io/cleanuparr/testing docker repository.
           required: true
         - label: Ensured I am using the latest version.
           required: true
