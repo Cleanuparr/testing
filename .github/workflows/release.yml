@@ -52,14 +52,18 @@ jobs:
           echo "📱 App Version: $app_version"
           echo "🔖 Is Tag: $is_tag"
 
-  # Run tests
-  test:
-    needs: validate
-    uses: ./.github/workflows/test.yml
+  build-frontend:
+    needs: [validate]
+    uses: ./.github/workflows/build-frontend.yml
     secrets: inherit
-  # Create GitHub release
+
+  # Build portable executables
+  build-executables:
+    needs: [validate, build-frontend]
+    uses: ./.github/workflows/build-executable.yml
+    secrets: inherit
   create-release:
-    needs: [validate, test]
+    needs: [validate, build-frontend, build-executables]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     
@@ -84,11 +88,57 @@ jobs:
           echo "📦 Downloaded artifacts:"
           find ./artifacts -type f -name "*.zip" -o -name "*.pkg" -o -name "*.exe" | sort
 
+      - name: Get draft release changelog
+        id: draft
+        run: |
+          # Find the draft release created by release-drafter
+          draft_info=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | {id: .id, tag: .tag_name, body: .body}' | head -1)
+
+          if [[ -n "$draft_info" ]]; then
+            draft_id=$(echo "$draft_info" | jq -r '.id')
+            draft_tag=$(echo "$draft_info" | jq -r '.tag')
+
+            # Get the body and save to file (handles multiline better)
+            gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .body' | head -1 > draft_body.txt
+
+            echo "📝 Found draft release: $draft_tag (ID: $draft_id)"
+            echo "draft_id=$draft_id" >> $GITHUB_OUTPUT
+            echo "has_draft=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No draft release found, will generate release notes"
+            echo "has_draft=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete draft release
+        if: steps.draft.outputs.has_draft == 'true'
+        run: |
+          echo "🗑️ Deleting draft release (ID: ${{ steps.draft.outputs.draft_id }})"
+          gh api -X DELETE repos/${{ github.repository }}/releases/${{ steps.draft.outputs.draft_id }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read changelog body
+        id: changelog
+        run: |
+          if [[ -f draft_body.txt ]]; then
+            {
+              echo "body<<CHANGELOG_EOF"
+              cat draft_body.txt
+              echo "CHANGELOG_EOF"
+            } >> $GITHUB_OUTPUT
+          else
+            echo "body=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ needs.validate.outputs.release_version }}
           tag_name: ${{ needs.validate.outputs.release_version }}
+          body: ${{ steps.changelog.outputs.body }}
+          generate_release_notes: ${{ steps.draft.outputs.has_draft != 'true' }}
           token: ${{ env.REPO_READONLY_PAT }}
           make_latest: true
           target_commitish: main
@@ -99,7 +149,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [validate, test]
+    needs: [validate, build-executables]
     runs-on: ubuntu-latest
     if: always()
 
@@ -137,6 +187,13 @@ jobs:
             echo "✅ **Tests**: Success" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Tests**: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check job results
+          if [[ "${{ needs.build-executables.result }}" == "success" ]]; then
+            echo "✅ **Portable Executables**: Success" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Portable Executables**: ${{ needs.build-executables.result }}" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
