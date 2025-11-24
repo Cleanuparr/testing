@@ -91,17 +91,20 @@ jobs:
       - name: Get draft release changelog
         id: draft
         run: |
-          # Find the draft release created by release-drafter
-          draft_info=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | {id: .id, tag: .tag_name, body: .body}' | head -1)
+          # Find the first draft release created by release-drafter
+          draft_id=$(gh api repos/${{ github.repository }}/releases --jq '[.[] | select(.draft == true)][0].id // empty')
 
-          if [[ -n "$draft_info" ]]; then
-            draft_id=$(echo "$draft_info" | jq -r '.id')
-            draft_tag=$(echo "$draft_info" | jq -r '.tag')
+          if [[ -n "$draft_id" ]]; then
+            # Get the full release info using the specific release ID
+            draft_tag=$(gh api repos/${{ github.repository }}/releases/$draft_id --jq '.tag_name')
 
-            # Get the body and save to file (handles multiline better)
-            gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .body' | head -1 > draft_body.txt
+            # Get the body and save to file (handles multiline properly)
+            gh api repos/${{ github.repository }}/releases/$draft_id --jq '.body' > draft_body.txt
 
             echo "📝 Found draft release: $draft_tag (ID: $draft_id)"
+            echo "📄 Changelog preview:"
+            head -5 draft_body.txt
+            echo "..."
             echo "draft_id=$draft_id" >> $GITHUB_OUTPUT
             echo "has_draft=true" >> $GITHUB_OUTPUT
           else
