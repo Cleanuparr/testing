@@ -24,16 +24,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - runtime: win-x64
-            platform: win-amd64
           - runtime: linux-x64
             platform: linux-amd64
-          - runtime: linux-arm64
-            platform: linux-arm64
-          - runtime: osx-x64
-            platform: osx-amd64
-          - runtime: osx-arm64
-            platform: osx-arm64
 
     steps:
       - name: Set variables
