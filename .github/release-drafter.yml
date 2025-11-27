@@ -18,15 +18,8 @@ categories:
     labels:
       - 'dependencies'
       - 'chore'
-      - 'github-actions'
-  - title: '⚡ Performance'
-    labels:
-      - 'performance'
-  - title: '🔒 Security'
-    labels:
-      - 'security'
 
-change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+change-template: '- $TITLE by @$AUTHOR in #$NUMBER'
 change-title-escapes: '\<*_&'
 
 version-resolver:
@@ -51,23 +44,7 @@ template: |
 
   $CHANGES
 
-  ## New Contributors
-  $CONTRIBUTORS
-
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
-
-  ## Installation
-
-  ### Docker
-  ```bash
-  docker pull ghcr.io/cleanuparr/testing:$RESOLVED_VERSION
-  ```
-
-  ### Binary
-  Download the appropriate binary for your platform from the assets below.
-
-  ## Upgrade Notes
-  <!-- Add any important upgrade instructions here before publishing -->
 
 exclude-labels:
   - 'skip-changelog'

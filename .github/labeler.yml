@@ -33,12 +33,6 @@ workflows:
   - changed-files:
     - any-glob-to-any-file: '.github/workflows/**/*'
 
-github-actions:
-  - changed-files:
-    - any-glob-to-any-file:
-      - '.github/workflows/**/*'
-      - '.github/actions/**/*'
-
 docker:
   - changed-files:
     - any-glob-to-any-file:
