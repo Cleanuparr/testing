@@ -10,6 +10,31 @@ on:
         description: 'Version to release (e.g., 1.0.0)'
         required: false
         default: ''
+      runTests:
+        description: 'Run test suite'
+        type: boolean
+        required: false
+        default: true
+      buildDocker:
+        description: 'Build Docker image'
+        type: boolean
+        required: false
+        default: true
+      pushDocker:
+        description: 'Push Docker image to registry'
+        type: boolean
+        required: false
+        default: false
+      buildBinaries:
+        description: 'Build executables and installers'
+        type: boolean
+        required: false
+        default: true
+      createRelease:
+        description: 'Create GitHub release'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   # Validate release
@@ -19,7 +44,7 @@ jobs:
       app_version: ${{ steps.version.outputs.app_version }}
       release_version: ${{ steps.version.outputs.release_version }}
       is_tag: ${{ steps.version.outputs.is_tag }}
-      
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,25 +72,98 @@ jobs:
           echo "app_version=$app_version" >> $GITHUB_OUTPUT
           echo "release_version=$release_version" >> $GITHUB_OUTPUT
           echo "is_tag=$is_tag" >> $GITHUB_OUTPUT
-          
+
           echo "🏷️ Release Version: $release_version"
           echo "📱 App Version: $app_version"
           echo "🔖 Is Tag: $is_tag"
 
+  # Run tests
+  test:
+    needs: validate
+    if: ${{ needs.validate.outputs.is_tag == 'true' || github.event.inputs.runTests == 'true' }}
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+
+  # Build frontend once for all build jobs and cache it
   build-frontend:
-    needs: [validate]
+    needs: [validate, test]
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.validate.outputs.is_tag == 'true' || github.event.inputs.buildBinaries == 'true')
     uses: ./.github/workflows/build-frontend.yml
     secrets: inherit
 
   # Build portable executables
   build-executables:
-    needs: [validate, build-frontend]
+    needs: [validate, test, build-frontend]
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.build-frontend.result == 'success' &&
+      (needs.validate.outputs.is_tag == 'true' || github.event.inputs.buildBinaries == 'true')
     uses: ./.github/workflows/build-executable.yml
+    with:
+      app_version: ${{ needs.validate.outputs.app_version }}
     secrets: inherit
+
+  # Build Windows installer
+  build-windows-installer:
+    needs: [validate, test, build-frontend]
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.build-frontend.result == 'success' &&
+      (needs.validate.outputs.is_tag == 'true' || github.event.inputs.buildBinaries == 'true')
+    uses: ./.github/workflows/build-windows-installer.yml
+    with:
+      app_version: ${{ needs.validate.outputs.app_version }}
+    secrets: inherit
+
+  # Build macOS installers (Intel and ARM)
+  build-macos:
+    needs: [validate, test, build-frontend]
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.build-frontend.result == 'success' &&
+      (needs.validate.outputs.is_tag == 'true' || github.event.inputs.buildBinaries == 'true')
+    uses: ./.github/workflows/build-macos-installer.yml
+    with:
+      app_version: ${{ needs.validate.outputs.app_version }}
+    secrets: inherit
+
+  # Build and push Docker image(s)
+  build-docker:
+    needs: [validate, test]
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.validate.outputs.is_tag == 'true' || github.event.inputs.buildDocker == 'true')
+    uses: ./.github/workflows/build-docker.yml
+    with:
+      push_docker: ${{ needs.validate.outputs.is_tag == 'true' || github.event.inputs.pushDocker == 'true' }}
+    secrets: inherit
+
+  # Create GitHub release
   create-release:
-    needs: [validate, build-frontend, build-executables]
+    needs: [validate, build-executables, build-windows-installer, build-macos]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: |
+      always() &&
+      needs.validate.result == 'success' &&
+      needs.build-executables.result == 'success' &&
+      needs.build-windows-installer.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      (
+        needs.validate.outputs.is_tag == 'true' ||
+        (github.event.inputs.createRelease == 'true' && github.event.inputs.buildBinaries == 'true')
+      )
     
     steps:
       - name: Get vault secrets
@@ -88,63 +186,15 @@ jobs:
           echo "📦 Downloaded artifacts:"
           find ./artifacts -type f -name "*.zip" -o -name "*.pkg" -o -name "*.exe" | sort
 
-      - name: Get draft release changelog
-        id: draft
-        run: |
-          # Find the first draft release created by release-drafter
-          draft_id=$(gh api repos/${{ github.repository }}/releases --jq '[.[] | select(.draft == true)][0].id // empty')
-
-          if [[ -n "$draft_id" ]]; then
-            # Get the full release info using the specific release ID
-            draft_tag=$(gh api repos/${{ github.repository }}/releases/$draft_id --jq '.tag_name')
-
-            # Get the body and save to file (handles multiline properly)
-            gh api repos/${{ github.repository }}/releases/$draft_id --jq '.body' > draft_body.txt
-
-            echo "📝 Found draft release: $draft_tag (ID: $draft_id)"
-            echo "📄 Changelog preview:"
-            head -5 draft_body.txt
-            echo "..."
-            echo "draft_id=$draft_id" >> $GITHUB_OUTPUT
-            echo "has_draft=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ No draft release found, will generate release notes"
-            echo "has_draft=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Delete draft release
-        if: steps.draft.outputs.has_draft == 'true'
-        run: |
-          echo "🗑️ Deleting draft release (ID: ${{ steps.draft.outputs.draft_id }})"
-          gh api -X DELETE repos/${{ github.repository }}/releases/${{ steps.draft.outputs.draft_id }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Read changelog body
-        id: changelog
-        run: |
-          if [[ -f draft_body.txt ]]; then
-            {
-              echo "body<<CHANGELOG_EOF"
-              cat draft_body.txt
-              echo "CHANGELOG_EOF"
-            } >> $GITHUB_OUTPUT
-          else
-            echo "body=" >> $GITHUB_OUTPUT
-          fi
-
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ needs.validate.outputs.release_version }}
           tag_name: ${{ needs.validate.outputs.release_version }}
-          body: ${{ steps.changelog.outputs.body }}
-          generate_release_notes: ${{ steps.draft.outputs.has_draft != 'true' }}
           token: ${{ env.REPO_READONLY_PAT }}
           make_latest: true
           target_commitish: main
+          generate_release_notes: true
           files: |
             ./artifacts/**/*.zip
             ./artifacts/**/*.pkg
@@ -152,7 +202,7 @@ jobs:
 
   # Summary job
   summary:
-    needs: [validate, build-executables]
+    needs: [validate, test, build-frontend, build-executables, build-windows-installer, build-macos, build-docker]
     runs-on: ubuntu-latest
     if: always()
 
@@ -185,19 +235,23 @@ jobs:
           echo "### Build Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Check test results
-          if [[ "${{ needs.test.result }}" == "success" ]]; then
-            echo "✅ **Tests**: Success" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Tests**: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-          fi
+          # Helper function to print job result
+          print_result() {
+            local name="$1"
+            local result="$2"
+            case "$result" in
+              success) echo "✅ **$name**: Success" >> $GITHUB_STEP_SUMMARY ;;
+              skipped) echo "⏭️ **$name**: Skipped" >> $GITHUB_STEP_SUMMARY ;;
+              *) echo "❌ **$name**: $result" >> $GITHUB_STEP_SUMMARY ;;
+            esac
+          }
 
-          # Check job results
-          if [[ "${{ needs.build-executables.result }}" == "success" ]]; then
-            echo "✅ **Portable Executables**: Success" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Portable Executables**: ${{ needs.build-executables.result }}" >> $GITHUB_STEP_SUMMARY
-          fi
+          print_result "Tests" "${{ needs.test.result }}"
+          print_result "Frontend Build" "${{ needs.build-frontend.result }}"
+          print_result "Portable Executables" "${{ needs.build-executables.result }}"
+          print_result "Windows Installer" "${{ needs.build-windows-installer.result }}"
+          print_result "macOS Installers (Intel & ARM)" "${{ needs.build-macos.result }}"
+          print_result "Docker Image Build" "${{ needs.build-docker.result }}"
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎉 **Build completed!**" >> $GITHUB_STEP_SUMMARY 
