@@ -18,7 +18,7 @@ jobs:
             secrets/data/github repo_readonly_pat | REPO_READONLY_PAT
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         timeout-minutes: 1
         with:
           repository: ${{ github.repository }}

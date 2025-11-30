@@ -55,7 +55,7 @@ jobs:
             secrets/data/github packages_pat | PACKAGES_PAT
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.githubRepository }}
           ref: ${{ github.ref_name }}

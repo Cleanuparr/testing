@@ -66,7 +66,7 @@ jobs:
             secrets/data/github packages_pat | PACKAGES_PAT
 
       - name: Checkout target repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         timeout-minutes: 1
         with:
           repository: ${{ env.githubRepository }}
