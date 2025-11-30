@@ -68,16 +68,16 @@ jobs:
           githubTags=""
 
           if [ -n "$latestDockerTag" ]; then
-            githubTags="$githubTags,ghcr.io/cleanuparr/cleanuparr:$latestDockerTag"
+            githubTags="$githubTags,ghcr.io/cleanuparr/testing:$latestDockerTag"
           fi
           if [ -n "$versionDockerTag" ]; then
-            githubTags="$githubTags,ghcr.io/cleanuparr/cleanuparr:$versionDockerTag"
+            githubTags="$githubTags,ghcr.io/cleanuparr/testing:$versionDockerTag"
           fi
           if [ -n "$minorVersionDockerTag" ]; then
-            githubTags="$githubTags,ghcr.io/cleanuparr/cleanuparr:$minorVersionDockerTag"
+            githubTags="$githubTags,ghcr.io/cleanuparr/testing:$minorVersionDockerTag"
           fi
           if [ -n "$majorVersionDockerTag" ]; then
-            githubTags="$githubTags,ghcr.io/cleanuparr/cleanuparr:$majorVersionDockerTag"
+            githubTags="$githubTags,ghcr.io/cleanuparr/testing:$majorVersionDockerTag"
           fi
 
           # set env vars
