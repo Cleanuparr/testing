@@ -369,7 +369,7 @@ jobs:
           echo "pkgName=${pkg_name}" >> $GITHUB_ENV
 
       - name: Upload installer as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Cleanuparr-macos-${{ matrix.artifact_suffix }}-installer
           path: '${{ env.pkgName }}'

@@ -138,7 +138,7 @@ jobs:
           echo "installerName=$installerName" >> $env:GITHUB_ENV
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Cleanuparr-windows-installer
           path: installer/${{ env.installerName }}
