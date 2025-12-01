@@ -168,16 +168,6 @@ jobs:
       )
     
     steps:
-      - name: Get vault secrets
-        uses: hashicorp/vault-action@v2
-        with:
-          url: ${{ secrets.VAULT_HOST }}
-          method: approle
-          roleId: ${{ secrets.VAULT_ROLE_ID }}
-          secretId: ${{ secrets.VAULT_SECRET_ID }}
-          secrets:
-            secrets/data/github repo_readonly_pat | REPO_READONLY_PAT
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
