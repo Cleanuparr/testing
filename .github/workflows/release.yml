@@ -203,7 +203,7 @@ jobs:
         with:
           name: ${{ needs.validate.outputs.release_version }}
           tag_name: ${{ needs.validate.outputs.release_version }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ env.REPO_READONLY_PAT }}
           make_latest: true
           target_commitish: main
           generate_release_notes: true
