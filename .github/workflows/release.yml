@@ -39,6 +39,7 @@ on:
 jobs:
   # Validate release
   validate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     outputs:
       app_version: ${{ steps.version.outputs.app_version }}
