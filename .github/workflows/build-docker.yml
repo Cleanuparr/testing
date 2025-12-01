@@ -136,8 +136,6 @@ jobs:
             VERSION=${{ env.version }}
             PACKAGES_USERNAME=${{ secrets.PACKAGES_USERNAME }}
             PACKAGES_PAT=${{ env.PACKAGES_PAT }}
-          outputs: |
-            type=image
           platforms: |
             linux/amd64
             linux/arm64
