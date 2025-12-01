@@ -149,6 +149,7 @@ jobs:
     uses: ./.github/workflows/build-docker.yml
     with:
       push_docker: ${{ needs.validate.outputs.is_tag == 'true' || github.event.inputs.pushDocker == 'true' }}
+      app_version: ${{ needs.validate.outputs.app_version }}
     secrets: inherit
 
   # Create GitHub release
