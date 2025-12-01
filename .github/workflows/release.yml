@@ -197,6 +197,7 @@ jobs:
           make_latest: true
           target_commitish: main
           generate_release_notes: true
+          draft: false
           files: |
             ./artifacts/**/*.zip
             ./artifacts/**/*.pkg
