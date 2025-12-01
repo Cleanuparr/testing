@@ -78,6 +78,16 @@ jobs:
           echo "📱 App Version: $app_version"
           echo "🔖 Is Tag: $is_tag"
 
+      - name: Check if release already exists
+        run: |
+          if gh release view "${{ steps.version.outputs.release_version }}" &>/dev/null; then
+            echo "❌ Release ${{ steps.version.outputs.release_version }} already exists. Stopping workflow."
+            exit 1
+          fi
+          echo "✅ Release ${{ steps.version.outputs.release_version }} does not exist. Proceeding."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Run tests
   test:
     needs: validate
